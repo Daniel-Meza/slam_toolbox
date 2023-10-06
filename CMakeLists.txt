@@ -66,6 +66,7 @@ set(libraries
     ceres_solver_plugin
     async_slam_toolbox
     sync_slam_toolbox
+    multirobot_slam_toolbox
     localization_slam_toolbox
     lifelong_slam_toolbox
     map_and_localization_slam_toolbox
@@ -103,7 +104,8 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   srvs/AddSubmap.srv
   srvs/DeserializePoseGraph.srv
   srvs/SerializePoseGraph.srv
-  DEPENDENCIES builtin_interfaces geometry_msgs std_msgs nav_msgs visualization_msgs
+  msg/ExternalLaserScan.msg
+  DEPENDENCIES builtin_interfaces geometry_msgs std_msgs nav_msgs visualization_msgs sensor_msgs
 )
 
 #### rviz Plugin
@@ -156,6 +158,11 @@ target_link_libraries(sync_slam_toolbox toolbox_common kartoSlamToolbox ${Boost_
 add_executable(sync_slam_toolbox_node src/slam_toolbox_sync_node.cpp)
 target_link_libraries(sync_slam_toolbox_node sync_slam_toolbox)
 
+add_library(multirobot_slam_toolbox src/slam_toolbox_multirobot.cpp)
+target_link_libraries(multirobot_slam_toolbox toolbox_common kartoSlamToolbox ${Boost_LIBRARIES})
+add_executable(multirobot_slam_toolbox_node src/slam_toolbox_multirobot_node.cpp)
+target_link_libraries(multirobot_slam_toolbox_node multirobot_slam_toolbox)
+
 add_library(localization_slam_toolbox src/slam_toolbox_localization.cpp)
 target_link_libraries(localization_slam_toolbox toolbox_common kartoSlamToolbox ${Boost_LIBRARIES})
 add_executable(localization_slam_toolbox_node src/slam_toolbox_localization_node.cpp)
@@ -188,6 +195,7 @@ target_link_libraries(merge_maps_kinematic kartoSlamToolbox toolbox_common)
 #### Install
 install(TARGETS async_slam_toolbox_node
                 sync_slam_toolbox_node
+                multirobot_slam_toolbox_node
                 localization_slam_toolbox_node
                 map_and_localization_slam_toolbox_node
                 merge_maps_kinematic

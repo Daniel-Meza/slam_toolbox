@@ -80,6 +80,7 @@ public:
     const std::string & base_frame);
   ~LaserAssistant();
   LaserMetadata toLaserMetadata(sensor_msgs::msg::LaserScan scan);
+  LaserMetadata toLaserMetadata(sensor_msgs::msg::LaserScan scan, geometry_msgs::msg::TransformStamped laser_pose);
 
 private:
   karto::LaserRangeFinder * makeLaser(const double & mountingYaw);
