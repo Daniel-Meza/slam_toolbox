@@ -24,6 +24,7 @@
 #include <memory>
 #include "slam_toolbox/slam_toolbox_common.hpp"
 #include "slam_toolbox/toolbox_msgs.hpp"
+#include "tf2_geometry_msgs/tf2_geometry_msgs.hpp"
 
 namespace slam_toolbox
 {
@@ -71,10 +72,12 @@ class MultiRobotSlamToolbox : public SlamToolbox
     std::queue<PosedScan> q_;
     std::shared_ptr<rclcpp::Service<slam_toolbox::srv::ClearQueue>> ssClear_;
     boost::mutex q_mutex_;
-    std::shared_ptr<rclcpp::Publisher<slam_toolbox::msg::ExternalLaserScan>> external_scan_pub_;
-    rclcpp::Subscription<slam_toolbox::msg::ExternalLaserScan>::SharedPtr external_scan_sub_;
     std::string external_scan_topic_;
     std::string current_ns_;
+    std::unique_ptr<tf2_ros::Buffer> tf2_buffer_;
+    std::shared_ptr<tf2_ros::TransformListener> tf2_listener_{nullptr};
+    std::shared_ptr<rclcpp::Publisher<slam_toolbox::msg::ExternalLaserScan>> external_scan_pub_;
+    rclcpp::Subscription<slam_toolbox::msg::ExternalLaserScan>::SharedPtr external_scan_sub_;
 };
 
 }  // namespace slam_toolbox

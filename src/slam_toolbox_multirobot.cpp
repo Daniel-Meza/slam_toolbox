@@ -24,7 +24,7 @@ namespace slam_toolbox
 
 /*****************************************************************************/
 MultiRobotSlamToolbox::MultiRobotSlamToolbox(rclcpp::NodeOptions options)
-: SlamToolbox(options), external_scan_topic_("/scan_external")
+: SlamToolbox(options), external_scan_topic_("/external_scan")
 /*****************************************************************************/
 {
   current_ns_ = this->get_namespace() + 1;
@@ -33,8 +33,14 @@ MultiRobotSlamToolbox::MultiRobotSlamToolbox(rclcpp::NodeOptions options)
     std::bind(&MultiRobotSlamToolbox::clearQueueCallback, this,
     std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
 
+  // Create background thread to run slam on valid laser scans
   threads_.push_back(std::make_unique<boost::thread>(
     boost::bind(&MultiRobotSlamToolbox::run, this)));
+
+  // Create transformation buffer
+  tf2_buffer_ = std::make_unique<tf2_ros::Buffer>(this->get_clock());
+  tf2_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf2_buffer_);
+  rclcpp::sleep_for(std::chrono::seconds(5)); // Small delay to allow static transformations to publish and buffer to fill up
 
   // Create publisher for external laser scans
   external_scan_pub_ = this->create_publisher<slam_toolbox::msg::ExternalLaserScan>(external_scan_topic_, 10);
@@ -131,15 +137,56 @@ void MultiRobotSlamToolbox::externalScanCallback(
   if (scan_ns == current_ns_) return;
 
   // Create standard laser scan message from external laser scan
-  // Add pose and heading angle
   sensor_msgs::msg::LaserScan::ConstSharedPtr scan = 
     std::make_shared<sensor_msgs::msg::LaserScan>(external_scan->scan);
+  
+  // Create pose from received external laser scan + local map frame transformation
+  // TODO Remove once ready
+  // Pose2 pose;
+  // pose.SetX(external_scan->pose.pose.pose.position.x);
+  // pose.SetY(external_scan->pose.pose.pose.position.y);
+  // tf2::Quaternion quat_tf;
+  // tf2::convert(external_scan->pose.pose.pose.orientation, quat_tf);
+  // pose.SetHeading(tf2::getYaw(quat_tf));
+
+  // Create pose from external laser scan + local map frame transformation
+  geometry_msgs::msg::TransformStamped transform_msg;
   Pose2 pose;
-  pose.SetX(external_scan->pose.pose.pose.position.x);
-  pose.SetY(external_scan->pose.pose.pose.position.y);
-  tf2::Quaternion quat_tf;
-  tf2::convert(external_scan->pose.pose.pose.orientation, quat_tf);
-  pose.SetHeading(tf2::getYaw(quat_tf));
+  try {
+    transform_msg = tf2_buffer_->lookupTransform(map_frame_, external_scan->pose.header.frame_id, external_scan->scan.header.stamp, rclcpp::Duration::from_seconds(0.1));
+  }
+  catch(const tf2::TransformException &ex) {
+    RCLCPP_INFO(this->get_logger(), "Could not transform %s to %s: %s", map_frame_.c_str(), external_scan->pose.header.frame_id.c_str(), ex.what());
+    return;
+  }
+  // Translation
+  pose.SetX(external_scan->pose.pose.pose.position.x + transform_msg.transform.translation.x);
+  pose.SetY(external_scan->pose.pose.pose.position.y + transform_msg.transform.translation.y);
+  // Rotation
+  tf2::Quaternion quat1, quat2;
+  tf2::convert(external_scan->pose.pose.pose.orientation, quat1);
+  tf2::convert(transform_msg.transform.rotation, quat2);
+  pose.SetHeading(tf2::getYaw(quat1) + tf2::getYaw(quat2));
+
+
+  std::cout << "----------" << std::endl;
+  std::cout << map_frame_ << "\t" << external_scan->pose.header.frame_id << std::endl;
+
+  std::cout << external_scan->pose.pose.pose.position.x << "\t" << external_scan->pose.pose.pose.position.y << "\t" << tf2::getYaw(quat1) << std::endl;
+
+  std::cout << transform_msg.transform.translation.x << "\t" << transform_msg.transform.translation.y << "\t" << tf2::getYaw(quat2) << std::endl;
+
+  std::cout << pose.GetX() << "\t" << pose.GetY() << "\t" << pose.GetHeading() << std::endl;
+
+  // pose.SetX(external_scan->pose.pose.pose.position.x);
+  // pose.SetY(external_scan->pose.pose.pose.position.y);
+  // pose.SetHeading(tf2::getYaw(quat1));
+
+  // TODO Remove once ready
+  // std::cout << map_frame_ << "\t" << external_scan->pose.header.frame_id << std::endl;
+  // std::cout << transform_msg.transform.translation.x << "\t" << transform_msg.transform.translation.y << "\t" << transform_msg.transform.rotation.z << std::endl;
+  // std::cout << transform_msg.transform.rotation.x << "\t" << transform_msg.transform.rotation.y << "\t" << transform_msg.transform.rotation.z << "\t" << transform_msg.transform.rotation.w << std::endl;
+
 
   // Ensure the laser can be used
   LaserRangeFinder* laser = getExternalLaser(external_scan);
@@ -152,18 +199,19 @@ void MultiRobotSlamToolbox::externalScanCallback(
   // Since message is from different sensor, assume valid and process it
   LocalizedRangeScan* range_scan = addExternalScan(laser, scan, pose);
   if (range_scan != nullptr) {
-    // Add pose and heading angle
-    pose = range_scan->GetCorrectedPose();
+    // TODO This is probably not needed. Was probably here to publish transform since there were originally separate trees.
+    // Update pose of the robot based on map frame
+    // pose = range_scan->GetCorrectedPose();
     // tf2::Quaternion q(0., 0., 0., 1.0);
     // q.setRPY(0., 0., pose.GetHeading());
     // tf2::Transform transform(q, tf2::Vector3(pose.GetX(), pose.GetY(), 0.0));
 
-    // Broadcast transform
+    // Broadcast transformation
     // geometry_msgs::msg::TransformStamped tf_msg;
     // tf2::toMsg(transform, tf_msg.transform);
     // tf_msg.header.frame_id = map_frame_;
-    // tf_msg.header.stamp = localized_scan->pose.header.stamp;
-    // tf_msg.child_frame_id = localized_scan->scanner_offset.header.frame_id;
+    // tf_msg.header.stamp = external_scan->pose.header.stamp;
+    // tf_msg.child_frame_id = external_scan->scanner_offset.header.frame_id;
     // tfB_->sendTransform(tf_msg);
   }
 }
@@ -256,51 +304,36 @@ void MultiRobotSlamToolbox::publishExternalScan(
   const rclcpp::Time &t)
 /*****************************************************************************/
 {
-  slam_toolbox::msg::ExternalLaserScan scan_msg;
+  slam_toolbox::msg::ExternalLaserScan external_scan_msg;
 
   // Construct scan portion of the message
-  scan_msg.scan = *scan;
-  scan_msg.scan.header.frame_id = scan->header.frame_id;
+  external_scan_msg.scan = *scan;
+  external_scan_msg.scan.header.frame_id = scan->header.frame_id;  // scan frame
 
   // Construct scanner_offset portion of the message
   tf2::Quaternion q_offset(0., 0., 0., 1.0);
   q_offset.setRPY(0., 0., offset.GetHeading());
   tf2::Transform scanner_offset(q_offset, tf2::Vector3(offset.GetX(), offset.GetY(), 0.0));
-  tf2::toMsg(scanner_offset, scan_msg.scanner_offset.transform);
-  scan_msg.scanner_offset.header.stamp = t;
-  scan_msg.scanner_offset.header.frame_id = base_frame_;
-  scan_msg.scanner_offset.child_frame_id = scan_msg.scan.header.frame_id;
+  tf2::toMsg(scanner_offset, external_scan_msg.scanner_offset.transform);
+  external_scan_msg.scanner_offset.header.stamp = t;
+  external_scan_msg.scanner_offset.header.frame_id = base_frame_;    // base footprint frame.
+  external_scan_msg.scanner_offset.child_frame_id = scan->header.frame_id;   // scan frame
 
   // Construct pose portion of the message
   tf2::Quaternion q(0., 0., 0., 1.0);
   q.setRPY(0., 0., pose.GetHeading());
   tf2::Transform transform(q, tf2::Vector3(pose.GetX(), pose.GetY(), 0.0));
-  tf2::toMsg(transform, scan_msg.pose.pose.pose);
+  tf2::toMsg(transform, external_scan_msg.pose.pose.pose);   // relative to map frame
 
-  scan_msg.pose.pose.covariance[0] = cov(0, 0) * position_covariance_scale_;  // x
-  scan_msg.pose.pose.covariance[1] = cov(0, 1) * position_covariance_scale_;  // xy
-  scan_msg.pose.pose.covariance[6] = cov(1, 0) * position_covariance_scale_;  // xy
-  scan_msg.pose.pose.covariance[7] = cov(1, 1) * position_covariance_scale_;  // y
-  scan_msg.pose.pose.covariance[35] = cov(2, 2) * yaw_covariance_scale_;      // yaw
-  scan_msg.pose.header.stamp = t;
-  scan_msg.pose.header.frame_id = map_frame_;
+  external_scan_msg.pose.pose.covariance[0] = cov(0, 0) * position_covariance_scale_;  // x
+  external_scan_msg.pose.pose.covariance[1] = cov(0, 1) * position_covariance_scale_;  // xy
+  external_scan_msg.pose.pose.covariance[6] = cov(1, 0) * position_covariance_scale_;  // xy
+  external_scan_msg.pose.pose.covariance[7] = cov(1, 1) * position_covariance_scale_;  // y
+  external_scan_msg.pose.pose.covariance[35] = cov(2, 2) * yaw_covariance_scale_;      // yaw
+  external_scan_msg.pose.header.stamp = t;
+  external_scan_msg.pose.header.frame_id = map_frame_;
 
-  // Set prefixed frame names
-  // scan_msg.scan.header.frame_id = (*(scan->header.frame_id.cbegin()) == '/') ? 
-  //   current_ns_ + scan->header.frame_id :
-  //   current_ns_ + "/" + scan->header.frame_id;
-
-  // scan_msg.pose.header.frame_id = (*(map_frame_.cbegin()) == '/') ? 
-  //   current_ns_ + map_frame_ :
-  //   current_ns_ + "/" + map_frame_;
-
-  // scan_msg.scanner_offset.child_frame_id = scan_msg.scan.header.frame_id;
-
-  // scan_msg.scanner_offset.header.frame_id = (*(base_frame_.cbegin()) == '/') ?
-  //   current_ns_ + base_frame_ :
-  //   current_ns_ + "/" + base_frame_;
-
-  external_scan_pub_->publish(scan_msg);
+  external_scan_pub_->publish(external_scan_msg);
 }
 
 /*****************************************************************************/
