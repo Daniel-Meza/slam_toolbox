@@ -67,8 +67,6 @@ class MultiRobotSlamToolbox : public SlamToolbox
       std::shared_ptr<slam_toolbox::srv::DeserializePoseGraph::Response> resp) override;
 
 
-    // using SlamToolbox::getLaser;
-
     std::queue<PosedScan> q_;
     std::shared_ptr<rclcpp::Service<slam_toolbox::srv::ClearQueue>> ssClear_;
     boost::mutex q_mutex_;

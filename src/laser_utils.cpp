@@ -132,11 +132,6 @@ karto::LaserRangeFinder * LaserAssistant::makeLaser(const double & mountingYaw)
     is_360_lidar = false;
   }
 
-  // Handle Turtlebot3 LD08 LiDAR after filtering node (check >355deg).
-  if (angular_range > 6.19592) {
-    is_360_lidar = false;
-  }
-
   laser->SetIs360Laser(is_360_lidar);
 
   double max_laser_range = 25;

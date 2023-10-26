@@ -116,15 +116,6 @@ void MultiRobotSlamToolbox::laserCallback(
     boost::mutex::scoped_lock lock(q_mutex_);
     q_.push(PosedScan(scan, pose));
   }
-
-  // TODO Remove
-  // Run SLAM algorithm to add map portion
-  // LocalizedRangeScan* range_scan = addScan(laser, scan, pose);
-  // if (range_scan != nullptr) {
-  //   Matrix3 covariance;
-  //   covariance.SetToIdentity();
-  //   publishLocalizedScan(scan, laser->GetOffsetPose(), range_scan->GetOdometricPose(), covariance, scan->header.stamp);
-  // }
 }
 
 /*****************************************************************************/
@@ -139,15 +130,6 @@ void MultiRobotSlamToolbox::externalScanCallback(
   // Create standard laser scan message from external laser scan
   sensor_msgs::msg::LaserScan::ConstSharedPtr scan = 
     std::make_shared<sensor_msgs::msg::LaserScan>(external_scan->scan);
-  
-  // Create pose from received external laser scan + local map frame transformation
-  // TODO Remove once ready
-  // Pose2 pose;
-  // pose.SetX(external_scan->pose.pose.pose.position.x);
-  // pose.SetY(external_scan->pose.pose.pose.position.y);
-  // tf2::Quaternion quat_tf;
-  // tf2::convert(external_scan->pose.pose.pose.orientation, quat_tf);
-  // pose.SetHeading(tf2::getYaw(quat_tf));
 
   // Create pose from external laser scan + local map frame transformation
   geometry_msgs::msg::TransformStamped transform_msg;
@@ -168,26 +150,6 @@ void MultiRobotSlamToolbox::externalScanCallback(
   tf2::convert(transform_msg.transform.rotation, quat2);
   pose.SetHeading(tf2::getYaw(quat1) + tf2::getYaw(quat2));
 
-
-  std::cout << "----------" << std::endl;
-  std::cout << map_frame_ << "\t" << external_scan->pose.header.frame_id << std::endl;
-
-  std::cout << external_scan->pose.pose.pose.position.x << "\t" << external_scan->pose.pose.pose.position.y << "\t" << tf2::getYaw(quat1) << std::endl;
-
-  std::cout << transform_msg.transform.translation.x << "\t" << transform_msg.transform.translation.y << "\t" << tf2::getYaw(quat2) << std::endl;
-
-  std::cout << pose.GetX() << "\t" << pose.GetY() << "\t" << pose.GetHeading() << std::endl;
-
-  // pose.SetX(external_scan->pose.pose.pose.position.x);
-  // pose.SetY(external_scan->pose.pose.pose.position.y);
-  // pose.SetHeading(tf2::getYaw(quat1));
-
-  // TODO Remove once ready
-  // std::cout << map_frame_ << "\t" << external_scan->pose.header.frame_id << std::endl;
-  // std::cout << transform_msg.transform.translation.x << "\t" << transform_msg.transform.translation.y << "\t" << transform_msg.transform.rotation.z << std::endl;
-  // std::cout << transform_msg.transform.rotation.x << "\t" << transform_msg.transform.rotation.y << "\t" << transform_msg.transform.rotation.z << "\t" << transform_msg.transform.rotation.w << std::endl;
-
-
   // Ensure the laser can be used
   LaserRangeFinder* laser = getExternalLaser(external_scan);
   if (!laser) {
@@ -198,22 +160,6 @@ void MultiRobotSlamToolbox::externalScanCallback(
 
   // Since message is from different sensor, assume valid and process it
   LocalizedRangeScan* range_scan = addExternalScan(laser, scan, pose);
-  if (range_scan != nullptr) {
-    // TODO This is probably not needed. Was probably here to publish transform since there were originally separate trees.
-    // Update pose of the robot based on map frame
-    // pose = range_scan->GetCorrectedPose();
-    // tf2::Quaternion q(0., 0., 0., 1.0);
-    // q.setRPY(0., 0., pose.GetHeading());
-    // tf2::Transform transform(q, tf2::Vector3(pose.GetX(), pose.GetY(), 0.0));
-
-    // Broadcast transformation
-    // geometry_msgs::msg::TransformStamped tf_msg;
-    // tf2::toMsg(transform, tf_msg.transform);
-    // tf_msg.header.frame_id = map_frame_;
-    // tf_msg.header.stamp = external_scan->pose.header.stamp;
-    // tf_msg.child_frame_id = external_scan->scanner_offset.header.frame_id;
-    // tfB_->sendTransform(tf_msg);
-  }
 }
 
 /*****************************************************************************/
