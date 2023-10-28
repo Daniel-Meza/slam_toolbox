@@ -40,7 +40,7 @@ MultiRobotSlamToolbox::MultiRobotSlamToolbox(rclcpp::NodeOptions options)
   // Create transformation buffer
   tf2_buffer_ = std::make_unique<tf2_ros::Buffer>(this->get_clock());
   tf2_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf2_buffer_);
-  rclcpp::sleep_for(std::chrono::seconds(5)); // Small delay to allow static transformations to publish and buffer to fill up
+  rclcpp::sleep_for(std::chrono::seconds(5)); // Small delay to allow transform buffer to fill up
 
   // Create publisher for external laser scans
   external_scan_pub_ = this->create_publisher<slam_toolbox::msg::ExternalLaserScan>(external_scan_topic_, 10);
