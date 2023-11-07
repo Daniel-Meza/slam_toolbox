@@ -76,6 +76,7 @@ void MultiRobotSlamToolbox::run()
         LaserRangeFinder* laser = getLaser(scan_w_pose.scan);
         LocalizedRangeScan* range_scan = addScan(laser, scan_w_pose);
         if (range_scan != nullptr) {
+          local_map_ready_ = true;
           Matrix3 covariance;
           covariance.SetToIdentity();
           publishExternalScan(scan_w_pose.scan, laser->GetOffsetPose(), range_scan->GetOdometricPose(), covariance, scan_w_pose.scan->header.stamp);
@@ -122,10 +123,10 @@ void MultiRobotSlamToolbox::laserCallback(
 void MultiRobotSlamToolbox::externalScanCallback(
   slam_toolbox::msg::ExternalLaserScan::ConstSharedPtr external_scan)
 {
-  // Get namespace from message, ignore those from oneself!
+  // Get namespace from message, ignore those from oneself or if initial map has not been posted!
   std::string scan_ns = external_scan->scan.header.frame_id.substr(0, 
                           external_scan->scan.header.frame_id.find('/'));
-  if (scan_ns == current_ns_) return;
+  if (!local_map_ready_ || scan_ns == current_ns_) return;
 
   // Create standard laser scan message from external laser scan
   sensor_msgs::msg::LaserScan::ConstSharedPtr scan = 

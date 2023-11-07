@@ -72,6 +72,7 @@ class MultiRobotSlamToolbox : public SlamToolbox
     boost::mutex q_mutex_;
     std::string external_scan_topic_;
     std::string current_ns_;
+    bool local_map_ready_ = false;
     std::unique_ptr<tf2_ros::Buffer> tf2_buffer_;
     std::shared_ptr<tf2_ros::TransformListener> tf2_listener_{nullptr};
     std::shared_ptr<rclcpp::Publisher<slam_toolbox::msg::ExternalLaserScan>> external_scan_pub_;
