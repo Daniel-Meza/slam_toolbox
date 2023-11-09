@@ -136,7 +136,7 @@ void MultiRobotSlamToolbox::externalScanCallback(
   geometry_msgs::msg::TransformStamped transform_msg;
   Pose2 pose;
   try {
-    transform_msg = tf2_buffer_->lookupTransform(map_frame_, external_scan->pose.header.frame_id, external_scan->scan.header.stamp, rclcpp::Duration::from_seconds(0.1));
+    transform_msg = tf2_buffer_->lookupTransform(map_frame_, external_scan->pose.header.frame_id, external_scan->scan.header.stamp, rclcpp::Duration::from_seconds(0.3));
   }
   catch(const tf2::TransformException &ex) {
     RCLCPP_INFO(this->get_logger(), "Could not transform %s to %s: %s", map_frame_.c_str(), external_scan->pose.header.frame_id.c_str(), ex.what());
