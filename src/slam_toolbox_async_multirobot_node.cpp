@@ -19,7 +19,7 @@
 /* Author: Steven Macenski */
 
 #include <memory>
-#include "slam_toolbox/slam_toolbox_multirobot.hpp"
+#include "slam_toolbox/slam_toolbox_async_multirobot.hpp"
 
 int main(int argc, char ** argv)
 {
@@ -28,7 +28,7 @@ int main(int argc, char ** argv)
   int stack_size = 40000000;
   {
     auto temp_node = std::make_shared<rclcpp::Node>("slam_toolbox");
-    temp_node->declare_parameter("stack_size_to_use",rclcpp::ParameterType::PARAMETER_INTEGER);
+    temp_node->declare_parameter("stack_size_to_use",rclcpp::ParameterType::PARAMETER_INTEGER );
     if (temp_node->get_parameter("stack_size_to_use", stack_size)) {
       RCLCPP_INFO(temp_node->get_logger(), "Node using stack size %i", (int)stack_size);
       const rlim_t max_stack_size = stack_size;
@@ -42,10 +42,10 @@ int main(int argc, char ** argv)
   }
 
   rclcpp::NodeOptions options;
-  auto sync_node = std::make_shared<slam_toolbox::MultiRobotSlamToolbox>(options);
-  sync_node->configure();
-  sync_node->loadPoseGraphByParams();
-  rclcpp::spin(sync_node->get_node_base_interface());
+  auto async_node = std::make_shared<slam_toolbox::AsynchronousMultiRobotSlamToolbox>(options);
+  async_node->configure();
+  async_node->loadPoseGraphByParams();
+  rclcpp::spin(async_node->get_node_base_interface());
   rclcpp::shutdown();
   return 0;
 }
