@@ -19,7 +19,7 @@
 /* Author: Steven Macenski */
 
 #include <memory>
-#include "slam_toolbox/slam_toolbox_multirobot.hpp"
+#include "slam_toolbox/slam_toolbox_sync_multirobot.hpp"
 
 int main(int argc, char ** argv)
 {
@@ -42,7 +42,7 @@ int main(int argc, char ** argv)
   }
 
   rclcpp::NodeOptions options;
-  auto sync_node = std::make_shared<slam_toolbox::MultiRobotSlamToolbox>(options);
+  auto sync_node = std::make_shared<slam_toolbox::SynchronousMultiRobotSlamToolbox>(options);
   sync_node->configure();
   sync_node->loadPoseGraphByParams();
   rclcpp::spin(sync_node->get_node_base_interface());

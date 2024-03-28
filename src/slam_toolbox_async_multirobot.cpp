@@ -61,8 +61,7 @@ void AsynchronousMultiRobotSlamToolbox::laserCallback(
   // Ensure the laser can be used
   LaserRangeFinder* laser = getLaser(scan);
   if (!laser) {
-    RCLCPP_WARN(get_logger(), "Failed to create laser device for"
-      " %s; discarding scan", scan->header.frame_id.c_str());
+    RCLCPP_WARN(get_logger(), "Failed to create laser device for %s; discarding scan", scan->header.frame_id.c_str());
     return;
   }
 
@@ -170,7 +169,6 @@ void AsynchronousMultiRobotSlamToolbox::externalScanCallback(
   pose.SetHeading(tf2::getYaw(quat1) + tf2::getYaw(quat2));
 
   // Ensure the laser can be used
-  // TODO Change back if this doesn't work
   LaserRangeFinder* laser = getLaser(scan);
   if (!laser) {
     RCLCPP_WARN(get_logger(), "Failed to create laser device for "

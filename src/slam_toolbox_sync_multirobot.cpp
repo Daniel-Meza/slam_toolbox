@@ -1,5 +1,7 @@
 /*
- * multirobot_slam_toolbox
+ * slam_toolbox
+ * Copyright Work Modifications (c) 2018, Simbe Robotics, Inc.
+ * Copyright Work Modifications (c) 2019, Steve Macenski
  * Copyright Work Modifications (c) 2023, Daniel I. Meza
  *
  * THE WORK (AS DEFINED BELOW) IS PROVIDED UNDER THE TERMS OF THIS CREATIVE
@@ -14,28 +16,27 @@
  *
  */
 
-/* Author: Steven Macenski */
-
-#include "slam_toolbox/slam_toolbox_multirobot.hpp"
+/* Author: Steve Macenski */
 
 #include <memory>
+#include "slam_toolbox/slam_toolbox_sync_multirobot.hpp"
 namespace slam_toolbox
 {
 
 /*****************************************************************************/
-MultiRobotSlamToolbox::MultiRobotSlamToolbox(rclcpp::NodeOptions options)
+SynchronousMultiRobotSlamToolbox::SynchronousMultiRobotSlamToolbox(rclcpp::NodeOptions options)
 : SlamToolbox(options), external_scan_topic_("/external_scan")
 /*****************************************************************************/
 {
   current_ns_ = this->get_namespace() + 1;
 
   ssClear_ = this->create_service<slam_toolbox::srv::ClearQueue>("slam_toolbox/clear_queue",
-    std::bind(&MultiRobotSlamToolbox::clearQueueCallback, this,
+    std::bind(&SynchronousMultiRobotSlamToolbox::clearQueueCallback, this,
     std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
 
   // Create background thread to run slam on valid laser scans
   threads_.push_back(std::make_unique<boost::thread>(
-    boost::bind(&MultiRobotSlamToolbox::run, this)));
+    boost::bind(&SynchronousMultiRobotSlamToolbox::run, this)));
 
   // Create transformation buffer
   tf2_buffer_ = std::make_unique<tf2_ros::Buffer>(this->get_clock());
@@ -46,11 +47,11 @@ MultiRobotSlamToolbox::MultiRobotSlamToolbox(rclcpp::NodeOptions options)
   external_scan_pub_ = this->create_publisher<slam_toolbox::msg::ExternalLaserScan>(external_scan_topic_, 10);
 
   // Create subscriber for external laser scans
-  external_scan_sub_ = this->create_subscription<slam_toolbox::msg::ExternalLaserScan>(external_scan_topic_, 10, std::bind(&MultiRobotSlamToolbox::externalScanCallback, this, std::placeholders::_1));
+  external_scan_sub_ = this->create_subscription<slam_toolbox::msg::ExternalLaserScan>(external_scan_topic_, 10, std::bind(&SynchronousMultiRobotSlamToolbox::externalScanCallback, this, std::placeholders::_1));
 }
 
 /*****************************************************************************/
-void MultiRobotSlamToolbox::run()
+void SynchronousMultiRobotSlamToolbox::run()
 /*****************************************************************************/
 {
   rclcpp::Rate r(100);
@@ -91,7 +92,7 @@ void MultiRobotSlamToolbox::run()
 }
 
 /*****************************************************************************/
-void MultiRobotSlamToolbox::laserCallback(
+void SynchronousMultiRobotSlamToolbox::laserCallback(
   sensor_msgs::msg::LaserScan::ConstSharedPtr scan)
 /*****************************************************************************/
 {
@@ -108,11 +109,11 @@ void MultiRobotSlamToolbox::laserCallback(
   // Ensure the laser can be used
   LaserRangeFinder* laser = getLaser(scan);
   if (!laser) {
-    RCLCPP_WARN(get_logger(), "MultiRobotSlamToolbox: Failed to create laser device for %s; discarding scan", scan->header.frame_id.c_str());
+    RCLCPP_WARN(get_logger(), "Failed to create laser device for %s; discarding scan", scan->header.frame_id.c_str());
     return;
   }
 
-  // If sync and valid, add to queue
+  // If valid, add to queue
   if (shouldProcessScan(scan, pose)) {
     boost::mutex::scoped_lock lock(q_mutex_);
     q_.push(PosedScan(scan, pose));
@@ -120,7 +121,7 @@ void MultiRobotSlamToolbox::laserCallback(
 }
 
 /*****************************************************************************/
-void MultiRobotSlamToolbox::externalScanCallback(
+void SynchronousMultiRobotSlamToolbox::externalScanCallback(
   slam_toolbox::msg::ExternalLaserScan::ConstSharedPtr external_scan)
 {
   // Get namespace from message, ignore those from oneself or if initial map has not been posted!
@@ -164,7 +165,7 @@ void MultiRobotSlamToolbox::externalScanCallback(
 }
 
 /*****************************************************************************/
-LaserRangeFinder* MultiRobotSlamToolbox::getExternalLaser(
+LaserRangeFinder* SynchronousMultiRobotSlamToolbox::getExternalLaser(
   const slam_toolbox::msg::ExternalLaserScan::ConstSharedPtr external_scan)
 /*****************************************************************************/
 {
@@ -185,7 +186,7 @@ LaserRangeFinder* MultiRobotSlamToolbox::getExternalLaser(
 }
 
 /*****************************************************************************/
-LocalizedRangeScan* MultiRobotSlamToolbox::addExternalScan(
+LocalizedRangeScan* SynchronousMultiRobotSlamToolbox::addExternalScan(
   LaserRangeFinder* laser,
   const sensor_msgs::msg::LaserScan::ConstSharedPtr &scan,
   Pose2 &odom_pose)
@@ -243,7 +244,7 @@ LocalizedRangeScan* MultiRobotSlamToolbox::addExternalScan(
 }
 
 /*****************************************************************************/
-void MultiRobotSlamToolbox::publishExternalScan( 
+void SynchronousMultiRobotSlamToolbox::publishExternalScan( 
   const sensor_msgs::msg::LaserScan::ConstSharedPtr &scan,
   const Pose2 &offset,
   const Pose2 &pose,
@@ -284,14 +285,13 @@ void MultiRobotSlamToolbox::publishExternalScan(
 }
 
 /*****************************************************************************/
-bool MultiRobotSlamToolbox::clearQueueCallback(
+bool SynchronousMultiRobotSlamToolbox::clearQueueCallback(
   const std::shared_ptr<rmw_request_id_t> request_header,
   const std::shared_ptr<slam_toolbox::srv::ClearQueue::Request> req,
   std::shared_ptr<slam_toolbox::srv::ClearQueue::Response> resp)
 /*****************************************************************************/
 {
-  RCLCPP_INFO(get_logger(), "MultiRobotSlamToolbox: "
-    "Clearing all queued scans to add to map.");
+  RCLCPP_INFO(get_logger(), "Clearing all queued scans to add to map.");
   while (!q_.empty()) {
     q_.pop();
   }
@@ -300,7 +300,7 @@ bool MultiRobotSlamToolbox::clearQueueCallback(
 }
 
 /*****************************************************************************/
-bool MultiRobotSlamToolbox::deserializePoseGraphCallback(
+bool SynchronousMultiRobotSlamToolbox::deserializePoseGraphCallback(
   const std::shared_ptr<rmw_request_id_t> request_header,
   const std::shared_ptr<slam_toolbox::srv::DeserializePoseGraph::Request> req,
   std::shared_ptr<slam_toolbox::srv::DeserializePoseGraph::Response> resp)

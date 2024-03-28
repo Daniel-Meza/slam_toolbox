@@ -17,8 +17,8 @@
 
 /* Author: Steven Macenski */
 
-#ifndef SLAM_TOOLBOX__SLAM_TOOLBOX_MULTIROBOT_HPP_
-#define SLAM_TOOLBOX__SLAM_TOOLBOX_MULTIROBOT_HPP_
+#ifndef SLAM_TOOLBOX__SLAM_TOOLBOX_SYNCHRONOUS_MULTIROBOT_HPP_
+#define SLAM_TOOLBOX__SLAM_TOOLBOX_SYNCHRONOUS_MULTIROBOT_HPP_
 
 #include <queue>
 #include <memory>
@@ -29,11 +29,11 @@
 namespace slam_toolbox
 {
 
-class MultiRobotSlamToolbox : public SlamToolbox
+class SynchronousMultiRobotSlamToolbox : public SlamToolbox
 {
   public:
-    explicit MultiRobotSlamToolbox(rclcpp::NodeOptions options);
-    ~MultiRobotSlamToolbox() {}
+    explicit SynchronousMultiRobotSlamToolbox(rclcpp::NodeOptions options);
+    ~SynchronousMultiRobotSlamToolbox() {}
     void run();
 
 
@@ -81,4 +81,4 @@ class MultiRobotSlamToolbox : public SlamToolbox
 
 }  // namespace slam_toolbox
 
-#endif   // SLAM_TOOLBOX__SLAM_TOOLBOX_MULTIROBOT_HPP_
+#endif   // SLAM_TOOLBOX__SLAM_TOOLBOX_SYNCHRONOUS_MULTIROBOT_HPP_
