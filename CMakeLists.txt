@@ -67,6 +67,7 @@ set(libraries
     SlamToolboxPlugin
     ceres_solver_plugin
     async_slam_toolbox
+    async_slam_toolbox_multirobot
     sync_slam_toolbox
     localization_slam_toolbox
     lifelong_slam_toolbox
@@ -149,11 +150,24 @@ target_link_libraries(toolbox_common kartoSlamToolbox ${Boost_LIBRARIES})
 rosidl_get_typesupport_target(cpp_typesupport_target ${PROJECT_NAME} "rosidl_typesupport_cpp")
 target_link_libraries(toolbox_common "${cpp_typesupport_target}")
 
+add_library(toolbox_common_multirobot src/slam_toolbox_common_multirobot.cpp src/map_saver.cpp src/loop_closure_assistant.cpp src/laser_utils.cpp src/slam_mapper.cpp)
+ament_target_dependencies(toolbox_common_multirobot
+  ${dependencies}
+)
+target_link_libraries(toolbox_common_multirobot kartoSlamToolbox ${Boost_LIBRARIES})
+rosidl_get_typesupport_target(cpp_typesupport_target ${PROJECT_NAME} "rosidl_typesupport_cpp")
+target_link_libraries(toolbox_common_multirobot "${cpp_typesupport_target}")
+
 #### Mapping executibles
 add_library(async_slam_toolbox src/slam_toolbox_async.cpp)
 target_link_libraries(async_slam_toolbox toolbox_common kartoSlamToolbox ${Boost_LIBRARIES})
 add_executable(async_slam_toolbox_node src/slam_toolbox_async_node.cpp)
 target_link_libraries(async_slam_toolbox_node async_slam_toolbox)
+
+add_library(async_slam_toolbox_multirobot src/slam_toolbox_async_multirobot.cpp)
+target_link_libraries(async_slam_toolbox_multirobot toolbox_common_multirobot kartoSlamToolbox ${Boost_LIBRARIES})
+add_executable(async_slam_toolbox_multirobot_node src/slam_toolbox_async_multirobot_node.cpp)
+target_link_libraries(async_slam_toolbox_multirobot_node async_slam_toolbox_multirobot)
 
 add_library(sync_slam_toolbox src/slam_toolbox_sync.cpp)
 target_link_libraries(sync_slam_toolbox toolbox_common kartoSlamToolbox ${Boost_LIBRARIES})
@@ -190,6 +204,7 @@ target_link_libraries(merge_maps_kinematic kartoSlamToolbox toolbox_common)
 #endif()
 
 rclcpp_components_register_nodes(async_slam_toolbox "slam_toolbox::AsynchronousSlamToolbox")
+rclcpp_components_register_nodes(async_slam_toolbox_multirobot "slam_toolbox::AsynchronousSlamToolboxMultirobot")
 rclcpp_components_register_nodes(sync_slam_toolbox "slam_toolbox::SynchronousSlamToolbox")
 rclcpp_components_register_nodes(localization_slam_toolbox "slam_toolbox::LocalizationSlamToolbox")
 rclcpp_components_register_nodes(lifelong_slam_toolbox "slam_toolbox::LifelongSlamToolbox")
@@ -197,6 +212,7 @@ rclcpp_components_register_nodes(map_and_localization_slam_toolbox "slam_toolbox
 
 #### Install
 install(TARGETS async_slam_toolbox_node
+                async_slam_toolbox_multirobot_node
                 sync_slam_toolbox_node
                 localization_slam_toolbox_node
                 map_and_localization_slam_toolbox_node
