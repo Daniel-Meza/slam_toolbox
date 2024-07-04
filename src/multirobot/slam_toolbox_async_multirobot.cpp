@@ -41,19 +41,18 @@ void AsynchronousSlamToolboxMultirobot::laserCallback(
 
   // no odom info on any pose helper
   Pose2 pose;
-  if (pose_helpers_.find(base_frame_id) == pose_helpers_.end()) {
+  if (!pose_helpers_[base_frame_id]->getOdomPose(pose, scan->header.stamp, base_frame_id)) {
+    RCLCPP_WARN(get_logger(), "Failed to compute odom pose for %s", base_frame_id.c_str());
     return;
   }
-  else {
-    pose_helpers_[base_frame_id]->getOdomPose(pose, scan->header.stamp, base_frame_id);
-  }
 
-  // Add new sensor to laser ID map, and to laser assistants
-  boost::mutex::scoped_lock l(laser_id_map_mutex_);
-  if (m_laser_id_to_base_id_.find(scan->header.frame_id) == m_laser_id_to_base_id_.end()) {
-    m_laser_id_to_base_id_[scan->header.frame_id] == base_frame_id;
-    // TODO
-    // laser_assistants_[scan->header.frame_id] = std::make_unique<laser_utils::LaserAssistant>(nh_, tf_.get(), base_frame_id);
+  // Add new sensor to laser ID map and create its laser assistant
+  { // ensure mutex is released
+    boost::mutex::scoped_lock l(laser_id_map_mutex_);
+    if (m_laser_id_to_base_id_.find(scan->header.frame_id) == m_laser_id_to_base_id_.end()) {
+      m_laser_id_to_base_id_[scan->header.frame_id] = base_frame_id;
+      laser_assistants_[scan->header.frame_id] = std::make_unique<laser_utils::LaserAssistant>(shared_from_this(), tf_.get(), base_frame_id);
+    }
   }
 
   // ensure the laser can be used

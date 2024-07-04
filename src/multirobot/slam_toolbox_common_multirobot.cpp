@@ -58,22 +58,19 @@ void SlamToolboxMultirobot::configure()
   setROSInterfaces();
   setSolver();
 
+  // Ensure right number of parameters were given
   if (base_frames_.size() != scan_topics_.size()) {
     RCLCPP_FATAL(get_logger(), "base_frames_.size() != laser_topics_.size()");
+    throw(std::runtime_error("Incorrect settings for parameters"));   // kill execution
   }
   if(base_frames_.size() != odom_frames_.size()) {
     RCLCPP_FATAL(get_logger(), "base_frames_.size() != odom_frames_.size()");
+    throw(std::runtime_error("Incorrect settings for parameters"));   // kill execution
   }
-  assert(base_frames_.size() == scan_topics_.size());
-  assert(base_frames_.size() == odom_frames_.size());
 
   for (size_t idx = 0; idx < base_frames_.size(); idx++) {
     m_base_id_to_odom_id_[base_frames_[idx]] = odom_frames_[idx];
-  }
-  for (size_t idx = 0; idx < base_frames_.size(); idx++) {
-    laser_assistants_[base_frames_[idx]] = std::make_unique<laser_utils::LaserAssistant>(shared_from_this(), tf_.get(), base_frames_[idx]);
-  }
-  for (size_t idx = 0; idx < base_frames_.size(); idx++) {
+    // laser_assistants_[base_frames_[idx]] = std::make_unique<laser_utils::LaserAssistant>(shared_from_this(), tf_.get(), base_frames_[idx]);
     pose_helpers_[base_frames_[idx]] = std::make_unique<pose_utils::GetPoseHelper>(tf_.get(), base_frames_[idx], odom_frames_[idx]);
   }
   scan_holder_ = std::make_unique<laser_utils::ScanHolder>(lasers_);
@@ -253,12 +250,15 @@ void SlamToolboxMultirobot::setROSInterfaces()
     std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
 
   for (size_t idx = 0; idx < scan_topics_.size(); idx++) {
-    RCLCPP_INFO(get_logger(), "Subscribing to scan: %s", scan_topics_[idx].c_str());
-    scan_filter_subs_.push_back(std::make_unique<message_filters::Subscriber<sensor_msgs::msg::LaserScan>>(shared_from_this().get(), scan_topics_[idx], rmw_qos_profile_sensor_data));
-    scan_filters_.push_back(std::make_unique<tf2_ros::MessageFilter<sensor_msgs::msg::LaserScan>>(
-    *scan_filter_subs_.back(), *tf_, odom_frames_[idx], scan_queue_size_, shared_from_this(),
-    tf2::durationFromSec(transform_timeout_.seconds())));
-    scan_filters_.back()->registerCallback(std::bind(&SlamToolboxMultirobot::laserCallback, this, std::placeholders::_1, base_frames_[idx]));
+    // RCLCPP_INFO(get_logger(), "Subscribing to scan: %s", scan_topics_[idx].c_str());
+    scan_filter_subs_.push_back(
+      std::make_unique<message_filters::Subscriber<sensor_msgs::msg::LaserScan>>(
+        shared_from_this().get(), scan_topics_[idx], rmw_qos_profile_sensor_data));
+    scan_filters_.push_back(
+      std::make_unique<tf2_ros::MessageFilter<sensor_msgs::msg::LaserScan>>(
+        *scan_filter_subs_.back(), *tf_, odom_frames_[idx], scan_queue_size_, shared_from_this(), tf2::durationFromSec(transform_timeout_.seconds())));
+    scan_filters_.back()->registerCallback(
+      std::bind(&SlamToolboxMultirobot::laserCallback, this, std::placeholders::_1, base_frames_[idx]));
   }
 }
 
@@ -278,8 +278,9 @@ void SlamToolboxMultirobot::publishTransformLoop(
       std::map<std::string, tf2::Transform> local_TFs_map;
       {
         boost::mutex::scoped_lock lock(map_to_odom_mutex_);
-        local_TFs_map = m_map_to_odom_;
+        local_TFs_map = m_map_to_odoms_;
       }
+
       // Publish all past and current transforms so none of them go stale
       std::map<std::string, tf2::Transform>::const_iterator iter;
       for (iter = local_TFs_map.begin(); iter != local_TFs_map.end(); iter++) {
@@ -403,10 +404,10 @@ LaserRangeFinder * SlamToolboxMultirobot::getLaser(
   sensor_msgs::msg::LaserScan::ConstSharedPtr & scan)
 /*****************************************************************************/
 {
-  // Use laser scan ID to get base frame ID
   const std::string & frame = scan->header.frame_id;
   if (lasers_.find(frame) == lasers_.end()) {
     try {
+      // Use laser scan ID to get base frame ID
       std::map<std::string, std::unique_ptr<laser_utils::LaserAssistant>>::const_iterator it = laser_assistants_.find(frame);
       if (it == laser_assistants_.end()) {
         RCLCPP_ERROR(get_logger(), "Failed to get requested laser assistant, aborting initialization (%s)", frame.c_str());
@@ -440,7 +441,7 @@ bool SlamToolboxMultirobot::updateMap()
   vis_utils::toNavMap(occ_grid, map_.map);
 
   // publish map as current
-  map_.map.header.stamp = scan_header.stamp;
+  map_.map.header.stamp = scan_header.stamp;    // TODO Who defines this? Is it the first robot to come online?
   sst_->publish(
     std::move(std::make_unique<nav_msgs::msg::OccupancyGrid>(map_.map)));
   sstm_->publish(
@@ -459,24 +460,28 @@ tf2::Stamped<tf2::Transform> SlamToolboxMultirobot::setTransformFromPoses(
   const bool & update_reprocessing_transform)
 /*****************************************************************************/
 {
-  tf2::Stamped<tf2::Transform> odom_to_map;
-  // Use laser frame to look up base and odom frame
+  // Use the laserscan frame to look up base and odom frame
   std::string base_frame;
-  boost::mutex::scoped_lock l(laser_id_map_mutex_);
-  std::map<std::string, std::string>::const_iterator it = m_laser_id_to_base_id_.find(header.frame_id);
-  if (it == m_laser_id_to_base_id_.end()) {
-    RCLCPP_ERROR(get_logger(), "Requested laser frame ID not in map: %s", header.frame_id.c_str());
-      return odom_to_map;
+  {
+    boost::mutex::scoped_lock l(laser_id_map_mutex_);   // TODO Change to std::lock_guard? Not needed now, maybe for my own package!
+    std::map<std::string, std::string>::const_iterator it = m_laser_id_to_base_id_.find(header.frame_id);
+    if (it == m_laser_id_to_base_id_.end()) {
+      RCLCPP_ERROR(get_logger(), "Requested laser frame ID not in map: %s", header.frame_id.c_str());
+        return tf2::Stamped<tf2::Transform>();
+    }
+    base_frame = it->second;
   }
-  base_frame = it->second;
   const std::string & odom_frame = m_base_id_to_odom_id_[base_frame];
+
   // Compute the map->odom transform
   const rclcpp::Time & t = header.stamp;
+  tf2::Stamped<tf2::Transform> odom_to_map;
   tf2::Quaternion q(0., 0., 0., 1.0);
   q.setRPY(0., 0., corrected_pose.GetHeading());
   tf2::Stamped<tf2::Transform> base_to_map(
     tf2::Transform(q, tf2::Vector3(corrected_pose.GetX(),
     corrected_pose.GetY(), 0.0)).inverse(), tf2_ros::fromMsg(t), base_frame);
+
   try {
     geometry_msgs::msg::TransformStamped base_to_map_msg, odom_to_map_msg;
 
@@ -514,7 +519,7 @@ tf2::Stamped<tf2::Transform> SlamToolboxMultirobot::setTransformFromPoses(
 
   // set map to odom for our transformation thread to publish
   boost::mutex::scoped_lock lock(map_to_odom_mutex_);
-  m_map_to_odom_[odom_frame] = tf2::Transform(tf2::Quaternion(odom_to_map.getRotation() ),
+  m_map_to_odoms_[odom_frame] = tf2::Transform(tf2::Quaternion(odom_to_map.getRotation() ),
       tf2::Vector3(odom_to_map.getOrigin() ) ).inverse();
 
   return odom_to_map;
@@ -673,7 +678,7 @@ LocalizedRangeScan * SlamToolboxMultirobot::addScan(
       scan->header, update_reprocessing_transform);
     dataset_->Add(range_scan);
 
-    publishPose(range_scan->GetCorrectedPose(), covariance, scan->header.stamp);    // TODO Keep or Remove?
+    publishPose(range_scan->GetCorrectedPose(), covariance, scan->header.stamp);    // TODO Seems to publish okay but there's no distinction between robots!
   } else {
     delete range_scan;
     range_scan = nullptr;

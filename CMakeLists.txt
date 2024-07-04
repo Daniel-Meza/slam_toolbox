@@ -64,6 +64,7 @@ set(dependencies
 
 set(libraries
     toolbox_common
+    toolbox_common_multirobot
     SlamToolboxPlugin
     ceres_solver_plugin
     async_slam_toolbox

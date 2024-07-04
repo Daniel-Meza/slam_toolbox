@@ -42,7 +42,7 @@ public:
 
   bool getOdomPose(karto::Pose2 & karto_pose, const rclcpp::Time & t, std::string ref_frame)
   {
-    // Only succeed if ref_frame matches base_frame_; otherwise using wrong pose helper
+    // Ensure the right pose helper is being called
     if (ref_frame != base_frame_) {
       return false;
     }
