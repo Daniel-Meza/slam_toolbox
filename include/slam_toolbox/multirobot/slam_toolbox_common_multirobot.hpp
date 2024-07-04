@@ -46,7 +46,7 @@
 #include "slam_toolbox/slam_mapper.hpp"
 #include "slam_toolbox/snap_utils.hpp"
 #include "slam_toolbox/laser_utils.hpp"
-#include "slam_toolbox/get_pose_helper_multirobot.hpp"
+#include "slam_toolbox/multirobot/get_pose_helper_multirobot.hpp"
 #include "slam_toolbox/map_saver.hpp"
 #include "slam_toolbox/loop_closure_assistant.hpp"
 
@@ -103,7 +103,8 @@ protected:
   bool updateMap();
   tf2::Stamped<tf2::Transform> setTransformFromPoses(
     const karto::Pose2 & pose,
-    const karto::Pose2 & karto_pose, const rclcpp::Time & t,
+    const karto::Pose2 & karto_pose,
+    const std_msgs::msg::Header & header,
     const bool & update_reprocessing_transform);
   karto::LocalizedRangeScan * getLocalizedRangeScan(
     karto::LaserRangeFinder * laser,

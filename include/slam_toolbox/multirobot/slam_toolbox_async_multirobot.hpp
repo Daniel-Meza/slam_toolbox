@@ -22,7 +22,7 @@
 #define SLAM_TOOLBOX__SLAM_TOOLBOX_ASYNC_MULTIROBOT_HPP_
 
 #include <memory>
-#include "slam_toolbox/slam_toolbox_common_multirobot.hpp"
+#include "slam_toolbox/multirobot/slam_toolbox_common_multirobot.hpp"
 
 namespace slam_toolbox
 {

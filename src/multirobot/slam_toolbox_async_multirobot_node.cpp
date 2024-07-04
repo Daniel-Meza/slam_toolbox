@@ -19,7 +19,7 @@
 /* Author: Steven Macenski */
 
 #include <memory>
-#include "slam_toolbox/slam_toolbox_async_multirobot.hpp"
+#include "slam_toolbox/multirobot/slam_toolbox_async_multirobot.hpp"
 
 int main(int argc, char ** argv)
 {

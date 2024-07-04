@@ -22,7 +22,7 @@
 #include <vector>
 #include <string>
 #include <chrono>
-#include "slam_toolbox/slam_toolbox_common_multirobot.hpp"
+#include "slam_toolbox/multirobot/slam_toolbox_common_multirobot.hpp"
 #include "slam_toolbox/serialization.hpp"
 
 namespace slam_toolbox
@@ -147,7 +147,6 @@ void SlamToolboxMultirobot::setSolver()
 void SlamToolboxMultirobot::setParams()
 /*****************************************************************************/
 {
-  map_to_odom_.setIdentity();
   odom_frames_ = std::vector<std::string>{"odom"};
   odom_frames_ = this->declare_parameter("odom_frame", odom_frames_); 
 
@@ -404,10 +403,16 @@ LaserRangeFinder * SlamToolboxMultirobot::getLaser(
   sensor_msgs::msg::LaserScan::ConstSharedPtr & scan)
 /*****************************************************************************/
 {
+  // Use laser scan ID to get base frame ID
   const std::string & frame = scan->header.frame_id;
   if (lasers_.find(frame) == lasers_.end()) {
     try {
-      lasers_[frame] = laser_assistant_->toLaserMetadata(*scan);
+      std::map<std::string, std::unique_ptr<laser_utils::LaserAssistant>>::const_iterator it = laser_assistants_.find(frame);
+      if (it == laser_assistants_.end()) {
+        RCLCPP_ERROR(get_logger(), "Failed to get requested laser assistant, aborting initialization (%s)", frame.c_str());
+        return nullptr;
+      }
+      lasers_[frame] = it->second->toLaserMetadata(*scan);
       dataset_->Add(lasers_[frame].getLaser(), true);
     } catch (tf2::TransformException & e) {
       RCLCPP_ERROR(get_logger(), "Failed to compute laser pose, "
@@ -450,17 +455,28 @@ bool SlamToolboxMultirobot::updateMap()
 tf2::Stamped<tf2::Transform> SlamToolboxMultirobot::setTransformFromPoses(
   const Pose2 & corrected_pose,
   const Pose2 & odom_pose,
-  const rclcpp::Time & t,
+  const std_msgs::msg::Header & header,
   const bool & update_reprocessing_transform)
 /*****************************************************************************/
 {
-  // Compute the map->odom transform
   tf2::Stamped<tf2::Transform> odom_to_map;
+  // Use laser frame to look up base and odom frame
+  std::string base_frame;
+  boost::mutex::scoped_lock l(laser_id_map_mutex_);
+  std::map<std::string, std::string>::const_iterator it = m_laser_id_to_base_id_.find(header.frame_id);
+  if (it == m_laser_id_to_base_id_.end()) {
+    RCLCPP_ERROR(get_logger(), "Requested laser frame ID not in map: %s", header.frame_id.c_str());
+      return odom_to_map;
+  }
+  base_frame = it->second;
+  const std::string & odom_frame = m_base_id_to_odom_id_[base_frame];
+  // Compute the map->odom transform
+  const rclcpp::Time & t = header.stamp;
   tf2::Quaternion q(0., 0., 0., 1.0);
   q.setRPY(0., 0., corrected_pose.GetHeading());
   tf2::Stamped<tf2::Transform> base_to_map(
     tf2::Transform(q, tf2::Vector3(corrected_pose.GetX(),
-    corrected_pose.GetY(), 0.0)).inverse(), tf2_ros::fromMsg(t), base_frame_);
+    corrected_pose.GetY(), 0.0)).inverse(), tf2_ros::fromMsg(t), base_frame);
   try {
     geometry_msgs::msg::TransformStamped base_to_map_msg, odom_to_map_msg;
 
@@ -474,7 +490,7 @@ tf2::Stamped<tf2::Transform> SlamToolboxMultirobot::setTransformFromPoses(
     base_to_map_msg.transform.translation.z = base_to_map.getOrigin().getZ();
     base_to_map_msg.transform.rotation = tf2::toMsg(base_to_map.getRotation());
 
-    odom_to_map_msg = tf_->transform(base_to_map_msg, odom_frame_);
+    odom_to_map_msg = tf_->transform(base_to_map_msg, odom_frame);
     tf2::fromMsg(odom_to_map_msg, odom_to_map);
   } catch (tf2::TransformException & e) {
     RCLCPP_ERROR(get_logger(), "Transform from base_link to odom failed: %s",
@@ -498,7 +514,7 @@ tf2::Stamped<tf2::Transform> SlamToolboxMultirobot::setTransformFromPoses(
 
   // set map to odom for our transformation thread to publish
   boost::mutex::scoped_lock lock(map_to_odom_mutex_);
-  map_to_odom_ = tf2::Transform(tf2::Quaternion(odom_to_map.getRotation() ),
+  m_map_to_odom_[odom_frame] = tf2::Transform(tf2::Quaternion(odom_to_map.getRotation() ),
       tf2::Vector3(odom_to_map.getOrigin() ) ).inverse();
 
   return odom_to_map;
@@ -535,18 +551,30 @@ bool SlamToolboxMultirobot::shouldProcessScan(
   const Pose2 & pose)
 /*****************************************************************************/
 {
-  static Pose2 last_pose;
-  static rclcpp::Time last_scan_time = rclcpp::Time(0.);
+  static std::vector<std::string> scan_frame_ids;
+  static std::map<std::string, Pose2> last_poses;
+  static std::map<std::string, rclcpp::Time> last_scan_times;
   static double min_dist2 =
     smapper_->getMapper()->getParamMinimumTravelDistance() *
     smapper_->getMapper()->getParamMinimumTravelDistance();
-  static int scan_ctr = 0;
-  scan_ctr++;
+  
+  // Check if frame id of current scan is new
+  bool new_scan_frame_id = false;
+  std::string cur_frame_id = scan->header.frame_id;
+  if (std::find(scan_frame_ids.begin(), scan_frame_ids.end(), cur_frame_id) == scan_frame_ids.end()) {
+    // New scan
+    new_scan_frame_id = true;
+    scan_frame_ids.push_back(cur_frame_id);
+    last_scan_times[cur_frame_id] = rclcpp::Time(0.);
+  }
+
+  static std::map<std::string, int> scan_ctrs;
+  scan_ctrs[cur_frame_id]++;
 
   // we give it a pass on the first measurement to get the ball rolling
-  if (first_measurement_) {
-    last_scan_time = scan->header.stamp;
-    last_pose = pose;
+  if (first_measurement_ || new_scan_frame_id) {
+    last_scan_times[cur_frame_id] = scan->header.stamp;
+    last_poses[cur_frame_id] = pose;
     first_measurement_ = false;
     return true;
   }
@@ -557,23 +585,23 @@ bool SlamToolboxMultirobot::shouldProcessScan(
   }
 
   // throttled out
-  if ((scan_ctr % throttle_scans_) != 0) {
+  if ((scan_ctrs[cur_frame_id] % throttle_scans_) != 0) {
     return false;
   }
 
   // not enough time
-  if (rclcpp::Time(scan->header.stamp) - last_scan_time < minimum_time_interval_) {
+  if (rclcpp::Time(scan->header.stamp) - last_scan_times[cur_frame_id] < minimum_time_interval_) {
     return false;
   }
 
   // check moved enough, within 10% for correction error
-  const double dist2 = last_pose.SquaredDistance(pose);
-  if (dist2 < 0.8 * min_dist2 || scan_ctr < 5) {
+  const double dist2 = last_poses[cur_frame_id].SquaredDistance(pose);
+  if (dist2 < 0.8 * min_dist2 || scan_ctrs[cur_frame_id] < 5) {
     return false;
   }
 
-  last_pose = pose;
-  last_scan_time = scan->header.stamp;
+  last_poses[cur_frame_id] = pose;
+  last_scan_times[cur_frame_id] = scan->header.stamp;
 
   return true;
 }
@@ -607,11 +635,13 @@ LocalizedRangeScan * SlamToolboxMultirobot::addScan(
 
   if (processor_type_ == PROCESS) {
     processed = smapper_->getMapper()->Process(range_scan, &covariance);
-  } else if (processor_type_ == PROCESS_FIRST_NODE) {
+  }
+  else if (processor_type_ == PROCESS_FIRST_NODE) {
     processed = smapper_->getMapper()->ProcessAtDock(range_scan, &covariance);
     processor_type_ = PROCESS;
     update_reprocessing_transform = true;
-  } else if (processor_type_ == PROCESS_NEAR_REGION) {
+  }
+  else if (processor_type_ == PROCESS_NEAR_REGION) {
     boost::mutex::scoped_lock l(pose_mutex_);
     if (!process_near_pose_) {
       RCLCPP_ERROR(get_logger(), "Process near region called without a "
@@ -625,7 +655,8 @@ LocalizedRangeScan * SlamToolboxMultirobot::addScan(
       range_scan, false, &covariance);
     update_reprocessing_transform = true;
     processor_type_ = PROCESS;
-  } else {
+  }
+  else {
     RCLCPP_FATAL(get_logger(),
       "SlamToolboxMultirobot: No valid processor type set! Exiting.");
     exit(-1);
@@ -639,10 +670,10 @@ LocalizedRangeScan * SlamToolboxMultirobot::addScan(
     }
 
     setTransformFromPoses(range_scan->GetCorrectedPose(), odom_pose,
-      scan->header.stamp, update_reprocessing_transform);
+      scan->header, update_reprocessing_transform);
     dataset_->Add(range_scan);
 
-    publishPose(range_scan->GetCorrectedPose(), covariance, scan->header.stamp);
+    publishPose(range_scan->GetCorrectedPose(), covariance, scan->header.stamp);    // TODO Keep or Remove?
   } else {
     delete range_scan;
     range_scan = nullptr;
@@ -793,6 +824,7 @@ void SlamToolboxMultirobot::loadSerializedPoseGraph(
     exit(-1);
   }
 
+  // TODO Kept ROS2 version, any modifications needed?
   // create a current laser sensor
   LaserRangeFinder * laser =
     dynamic_cast<LaserRangeFinder *>(
@@ -805,6 +837,38 @@ void SlamToolboxMultirobot::loadSerializedPoseGraph(
     RCLCPP_ERROR(get_logger(), "Invalid sensor pointer in dataset."
       " Unable to register sensor.");
   }
+
+  // create a current laser sensor
+  // LaserRangeFinder * laser =
+  //   dynamic_cast<LaserRangeFinder *>(
+  //   dataset_->GetLasers()[0]);
+  // Sensor * pSensor = dynamic_cast<Sensor *>(laser);
+  // if (pSensor) {
+  //   SensorManager::GetInstance()->RegisterSensor(pSensor);
+  //   while (rclcpp::ok()) {
+  //     RCLCPP_INFO(get_logger(), "Waiting for incoming scan to get metadata...");
+  //     boost::shared_ptr<sensor_msgs::msg::LaserScan const> scan = ros::topic::waitForMessage<sensor_msgs::msg::LaserScan>(
+  //       scan_topics_.front(), rclcpp::Duration::from_seconds(1.0));
+  //     if (scan) {
+  //       RCLCPP_INFO(get_logger(), "Got scan!");
+  //       try {
+  //         const std::string & frame = scan->header.frame_id;
+  //         std::map<std::string, std::unique_ptr<laser_utils::LaserAssistant>>::const_iterator it = laser_assistants_.find(frame);
+  //         if (it == laser_assistants_.end()) {
+  //           RCLCPP_ERROR(get_logger(), "Failed to get requested laser assistant, aborting continue mapping (%s)", frame.c_str());
+  //           exit(-1);
+  //         }
+  //         lasers_[frame] = it->second->toLaserMetadata(*scan);
+  //       } catch (tf2::TransformException & e) {
+  //         RCLCPP_ERROR(get_logger(), "Failed to compute laser pose, aborting continue mapping (%s)", e.what());
+  //         exit(-1);
+  //       }
+  //     }
+  //   }
+  // } else {
+  //   RCLCPP_ERROR(get_logger(), "Invalid sensor pointer in dataset."
+  //     " Unable to register sensor.");
+  // }
 
   solver_->Compute();
 }

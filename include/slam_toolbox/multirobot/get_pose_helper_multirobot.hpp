@@ -56,6 +56,12 @@ public:
     } catch (tf2::TransformException & e) {
       return false;
     }
+
+    const double yaw = tf2::getYaw(odom_pose.transform.rotation);
+    karto_pose = karto::Pose2(odom_pose.transform.translation.x,
+        odom_pose.transform.translation.y, yaw);
+    
+    return true;
   }
 
 private:
