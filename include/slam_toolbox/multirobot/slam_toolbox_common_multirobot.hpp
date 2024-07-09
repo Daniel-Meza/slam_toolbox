@@ -48,7 +48,7 @@
 #include "slam_toolbox/laser_utils.hpp"
 #include "slam_toolbox/multirobot/get_pose_helper_multirobot.hpp"
 #include "slam_toolbox/map_saver.hpp"
-#include "slam_toolbox/loop_closure_assistant.hpp"
+#include "slam_toolbox/multirobot/loop_closure_assistant_multirobot.hpp"
 
 namespace slam_toolbox
 {

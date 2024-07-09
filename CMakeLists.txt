@@ -151,7 +151,7 @@ target_link_libraries(toolbox_common kartoSlamToolbox ${Boost_LIBRARIES})
 rosidl_get_typesupport_target(cpp_typesupport_target ${PROJECT_NAME} "rosidl_typesupport_cpp")
 target_link_libraries(toolbox_common "${cpp_typesupport_target}")
 
-add_library(toolbox_common_multirobot src/multirobot/slam_toolbox_common_multirobot.cpp src/map_saver.cpp src/loop_closure_assistant.cpp src/laser_utils.cpp src/slam_mapper.cpp)
+add_library(toolbox_common_multirobot src/multirobot/slam_toolbox_common_multirobot.cpp src/map_saver.cpp src/multirobot/loop_closure_assistant_multirobot.cpp src/laser_utils.cpp src/slam_mapper.cpp)
 ament_target_dependencies(toolbox_common_multirobot
   ${dependencies}
 )
