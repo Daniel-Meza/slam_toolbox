@@ -173,28 +173,32 @@ void LoopClosureAssistant::publishGraph()
     first_localization_id = localization_vertices.front().vertex->GetObject()->GetUniqueId();
   }
 
-  visualization_msgs::msg::MarkerArray marray;
+  // visualization_msgs::msg::MarkerArray marray;
+  std::map<karto::Name, visualization_msgs::msg::MarkerArray> m_sensor_name_to_marray;
 
-  // clear existing markers to account for any removed nodes
+  // Prepare clear marker message
   visualization_msgs::msg::Marker clear;
   clear.header.stamp = node_->now();
   clear.action = visualization_msgs::msg::Marker::DELETEALL;
-  marray.markers.push_back(clear);
+  // marray.markers.push_back(clear);
 
-  // TODO these control the color of the vetices
   visualization_msgs::msg::Marker m = vis_utils::toMarker(map_frame_, "slam_toolbox", 0.1, node_);
+
+  // TODO Different namespaces for different robot markers?
 
   // add map nodes
   for (const auto & sensor_name : vertices) {
-    // TODO Continue here
+    // Set sensor color based on robot and create its marker array
     std::map<karto::Name, std_msgs::msg::ColorRGBA>::const_iterator map_it = m_sensor_name_to_color_.find(sensor_name.first);
     if (map_it == m_sensor_name_to_color_.end()) {
-      m_sensor_name_to_color_[sensor_name.first] = createNewColor();
+      m_sensor_name_to_color_[sensor_name.first] = generateNewColor();  // random color
+      m_sensor_name_to_marray[sensor_name.first] = visualization_msgs::msg::MarkerArray();  // initialize marker array
+      m_sensor_name_to_marray[sensor_name.first].markers.push_back(clear);  // clear existing markers to account for any removed nodes
     }
     m.color = m_sensor_name_to_color_[sensor_name.first];
 
     for (const auto & vertex : sensor_name.second) {
-      m.color.g = vertex.first < first_localization_id ? 0.0 : 1.0;
+      // m.color.g = vertex.first < first_localization_id ? 0.0 : 1.0;
       const auto & pose = vertex.second->GetObject()->GetCorrectedPose();
       m.id = vertex.first;
       m.pose.position.x = pose.GetX();
@@ -208,7 +212,8 @@ void LoopClosureAssistant::publishGraph()
           &LoopClosureAssistant::processInteractiveFeedback,
           this, std::placeholders::_1));
       } else {
-        marray.markers.push_back(m);
+        // marray.markers.push_back(m);
+        m_sensor_name_to_marray[sensor_name.first].markers.push_back(m);
       }
     }
   }
@@ -258,17 +263,16 @@ void LoopClosureAssistant::publishGraph()
     p1.x = pose1.GetX();
     p1.y = pose1.GetY();
 
-    // TODO Set colors using the "m_sensor_name_to_color_" variable. Should use different namespaces based on robot and ensure that edges between different robots are a solid blue/red color.
-    // Set colors for edges of different robots
+    // Set edge color based on robot
     if (source_sensor_name == target_sensor_name) {
-      edges_marker.color.r = 0;
-      edges_marker.color.g = 1;
-      edges_marker.color.b = 0;
-      edges_marker.color.a = 0.5;
-      // localization_edges_marker.color.r = 0;
-      // localization_edges_marker.color.g = 1;
-      // localization_edges_marker.color.b = 0;
-      // localization_edges_marker.color.a = 0.5;
+      edges_marker.color = m_sensor_name_to_color_[source_sensor_name];
+      edges_marker.color.a = 0.7;
+      localization_edges_marker.color = m_sensor_name_to_color_[source_sensor_name];
+      localization_edges_marker.color.a = 0.7;
+      std::cout << "-" << std::endl;
+    }
+    else {
+      std::cout << "---" << std::endl;
     }
 
     if (source_id >= first_localization_id || target_id >= first_localization_id) {
@@ -425,16 +429,17 @@ void LoopClosureAssistant::addMovedNodes(const int & id, Eigen::Vector3d vec)
 }
 
 /*****************************************************************************/
-std_msgs::msg::ColorRGBA createNewColor()
+std_msgs::msg::ColorRGBA LoopClosureAssistant::generateNewColor()
 /*****************************************************************************/
 {
-  std_msgs::msg::ColorRGBA new_color;
-  new_color.r = (float)(rand() % 1000) / 1000;
-  new_color.g = (float)(rand() % 1000) / 1000;
-  new_color.b = (float)(rand() % 1000) / 1000;
-  new_color.a = 1;
+  // Generate random color
+  std_msgs::msg::ColorRGBA color;     // ranges are from 0.0 - 1.0
+  color.r = (float)(rand() % 256) / 256;
+  color.g = (float)(rand() % 256) / 256;
+  color.b = (float)(rand() % 256) / 256;
+  color.a = 1;
 
-  return new_color;
+  return color;
 }
 
 }  // namespace loop_closure_assistant

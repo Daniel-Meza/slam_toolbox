@@ -73,7 +73,7 @@ private:
   void moveNode(const int& id, const Eigen::Vector3d& pose);
   void addMovedNodes(const int& id, Eigen::Vector3d vec);
 
-  std_msgs::msg::ColorRGBA createNewColor();
+  std_msgs::msg::ColorRGBA generateNewColor();
 
   std::unique_ptr<tf2_ros::TransformBroadcaster> tfB_;
   laser_utils::ScanHolder * scan_holder_;
@@ -98,4 +98,4 @@ private:
 
 }   // namespace loop_closure_assistant
 
-#endif  // SLAM_TOOLBOX__LOOP_CLOSURE_ASSISTANT_MULTIPLE_HPP_
+#endif  // SLAM_TOOLBOX__LOOP_CLOSURE_ASSISTANT_MULTIROBOT_HPP_
