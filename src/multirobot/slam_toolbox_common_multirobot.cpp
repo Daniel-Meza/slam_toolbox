@@ -441,7 +441,7 @@ bool SlamToolboxMultirobot::updateMap()
   vis_utils::toNavMap(occ_grid, map_.map);
 
   // publish map as current
-  map_.map.header.stamp = scan_header.stamp;    // TODO Who defines this? Is it the first robot to come online?
+  map_.map.header.stamp = scan_header.stamp;
   sst_->publish(
     std::move(std::make_unique<nav_msgs::msg::OccupancyGrid>(map_.map)));
   sstm_->publish(
@@ -463,7 +463,7 @@ tf2::Stamped<tf2::Transform> SlamToolboxMultirobot::setTransformFromPoses(
   // Use the laserscan frame to look up base and odom frame
   std::string base_frame;
   {
-    boost::mutex::scoped_lock l(laser_id_map_mutex_);   // TODO Change to std::lock_guard? Not needed now, maybe for my own package!
+    boost::mutex::scoped_lock l(laser_id_map_mutex_);
     std::map<std::string, std::string>::const_iterator it = m_laser_id_to_base_id_.find(header.frame_id);
     if (it == m_laser_id_to_base_id_.end()) {
       RCLCPP_ERROR(get_logger(), "Requested laser frame ID not in map: %s", header.frame_id.c_str());
@@ -678,7 +678,7 @@ LocalizedRangeScan * SlamToolboxMultirobot::addScan(
       scan->header, update_reprocessing_transform);
     dataset_->Add(range_scan);
 
-    publishPose(range_scan->GetCorrectedPose(), covariance, scan->header.stamp);    // TODO Seems to publish okay but there's no distinction between robots!
+    publishPose(range_scan->GetCorrectedPose(), covariance, scan->header.stamp);
   } else {
     delete range_scan;
     range_scan = nullptr;
@@ -829,7 +829,6 @@ void SlamToolboxMultirobot::loadSerializedPoseGraph(
     exit(-1);
   }
 
-  // TODO Kept ROS2 version, any modifications needed?
   // create a current laser sensor
   LaserRangeFinder * laser =
     dynamic_cast<LaserRangeFinder *>(
@@ -842,38 +841,6 @@ void SlamToolboxMultirobot::loadSerializedPoseGraph(
     RCLCPP_ERROR(get_logger(), "Invalid sensor pointer in dataset."
       " Unable to register sensor.");
   }
-
-  // create a current laser sensor
-  // LaserRangeFinder * laser =
-  //   dynamic_cast<LaserRangeFinder *>(
-  //   dataset_->GetLasers()[0]);
-  // Sensor * pSensor = dynamic_cast<Sensor *>(laser);
-  // if (pSensor) {
-  //   SensorManager::GetInstance()->RegisterSensor(pSensor);
-  //   while (rclcpp::ok()) {
-  //     RCLCPP_INFO(get_logger(), "Waiting for incoming scan to get metadata...");
-  //     boost::shared_ptr<sensor_msgs::msg::LaserScan const> scan = ros::topic::waitForMessage<sensor_msgs::msg::LaserScan>(
-  //       scan_topics_.front(), rclcpp::Duration::from_seconds(1.0));
-  //     if (scan) {
-  //       RCLCPP_INFO(get_logger(), "Got scan!");
-  //       try {
-  //         const std::string & frame = scan->header.frame_id;
-  //         std::map<std::string, std::unique_ptr<laser_utils::LaserAssistant>>::const_iterator it = laser_assistants_.find(frame);
-  //         if (it == laser_assistants_.end()) {
-  //           RCLCPP_ERROR(get_logger(), "Failed to get requested laser assistant, aborting continue mapping (%s)", frame.c_str());
-  //           exit(-1);
-  //         }
-  //         lasers_[frame] = it->second->toLaserMetadata(*scan);
-  //       } catch (tf2::TransformException & e) {
-  //         RCLCPP_ERROR(get_logger(), "Failed to compute laser pose, aborting continue mapping (%s)", e.what());
-  //         exit(-1);
-  //       }
-  //     }
-  //   }
-  // } else {
-  //   RCLCPP_ERROR(get_logger(), "Invalid sensor pointer in dataset."
-  //     " Unable to register sensor.");
-  // }
 
   solver_->Compute();
 }
