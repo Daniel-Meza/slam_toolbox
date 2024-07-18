@@ -18,30 +18,40 @@
 
 /* Author: Steven Macenski */
 
-#ifndef SLAM_TOOLBOX__SLAM_TOOLBOX_ASYNC_MULTIROBOT_HPP_
-#define SLAM_TOOLBOX__SLAM_TOOLBOX_ASYNC_MULTIROBOT_HPP_
+#ifndef SLAM_TOOLBOX__SLAM_TOOLBOX_SYNC_MULTIROBOT_HPP_
+#define SLAM_TOOLBOX__SLAM_TOOLBOX_SYNC_MULTIROBOT_HPP_
 
+#include <queue>
 #include <memory>
 #include "slam_toolbox/multirobot/slam_toolbox_common_multirobot.hpp"
 
 namespace slam_toolbox
 {
 
-class AsynchronousSlamToolboxMultirobot : public SlamToolboxMultirobot
+class SynchronousSlamToolboxMultirobot : public SlamToolboxMultirobot
 {
 public:
-  explicit AsynchronousSlamToolboxMultirobot(rclcpp::NodeOptions options);
-  ~AsynchronousSlamToolboxMultirobot() {}
+  explicit SynchronousSlamToolboxMultirobot(rclcpp::NodeOptions options);
+  ~SynchronousSlamToolboxMultirobot() {}
+  void run();
 
 protected:
   void laserCallback(
     sensor_msgs::msg::LaserScan::ConstSharedPtr scan, const std::string & base_frame_id) override;
+  bool clearQueueCallback(
+    const std::shared_ptr<rmw_request_id_t> request_header,
+    const std::shared_ptr<slam_toolbox::srv::ClearQueue::Request> req,
+    std::shared_ptr<slam_toolbox::srv::ClearQueue::Response> resp);
   bool deserializePoseGraphCallback(
     const std::shared_ptr<rmw_request_id_t> request_header,
     const std::shared_ptr<slam_toolbox::srv::DeserializePoseGraph::Request> req,
     std::shared_ptr<slam_toolbox::srv::DeserializePoseGraph::Response> resp) override;
+
+  std::queue<PosedScan> q_;
+  std::shared_ptr<rclcpp::Service<slam_toolbox::srv::ClearQueue>> ssClear_;
+  boost::mutex q_mutex_;
 };
 
 }  // namespace slam_toolbox
 
-#endif  // SLAM_TOOLBOX__SLAM_TOOLBOX_ASYNC_MULTIROBOT_HPP_
+#endif  // SLAM_TOOLBOX__SLAM_TOOLBOX_SYNC_MULTIROBOT_HPP_
