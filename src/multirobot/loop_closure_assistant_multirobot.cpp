@@ -479,8 +479,6 @@ std_msgs::msg::ColorRGBA LoopClosureAssistant::generateNewColor()
   color.b = (float)(std::abs(rand()) % 256) / 256;
   color.a = 1;
 
-  std::cout << RAND_MAX << " " << color.r << " " << color.g << " " << color.b << std::endl;
-
   return color;
 }
 
