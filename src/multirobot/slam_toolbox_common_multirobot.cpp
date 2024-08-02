@@ -145,13 +145,13 @@ void SlamToolboxMultirobot::setParams()
 /*****************************************************************************/
 {
   odom_frames_ = std::vector<std::string>{"odom"};
-  odom_frames_ = this->declare_parameter("odom_frame", odom_frames_); 
+  odom_frames_ = this->declare_parameter("odom_frames", odom_frames_); 
 
   map_frame_ = std::string("map");
   map_frame_ = this->declare_parameter("map_frame", map_frame_);
 
   base_frames_ = std::vector<std::string>{"base_footprint"};
-  base_frames_ = this->declare_parameter("base_frame", base_frames_); 
+  base_frames_ = this->declare_parameter("base_frames", base_frames_); 
 
   resolution_ = 0.05;
   resolution_ = this->declare_parameter("resolution", resolution_);
@@ -169,7 +169,7 @@ void SlamToolboxMultirobot::setParams()
   use_map_saver_ = this->declare_parameter("use_map_saver", use_map_saver_);
 
   scan_topics_ = std::vector<std::string>{"/scan"};
-  scan_topics_ = this->declare_parameter("scan_topic", scan_topics_);
+  scan_topics_ = this->declare_parameter("scan_topics", scan_topics_);
 
   scan_queue_size_ = 1.0;
   scan_queue_size_ = this->declare_parameter("scan_queue_size", scan_queue_size_);
