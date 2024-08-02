@@ -174,9 +174,13 @@ For operation, all robots must be part of the same transformation tree and provi
 
 Currently, both synchronous and asynchronous mapping is supported:
 
-![two_robot_slam_toolbox_gif](/images/two_robot_slam_toolbox.gif?raw=true "Multi-Robot SLAM")
+![two_robot_slam_toolbox_gif](/images/multirobot/two_robot_slam_toolbox.gif?raw=true)
 
 Parameters `odom_frames`, `base_frames`, and `laser_topics` define the respective information for each robot. These parameters must match in order and number of elements, ensuring each robot is configured with a single LiDAR. On the other hand, parameter `map_frame` remains singular and defines the global map frame for all robots.
+
+Pose graph colors are randomly assigned for each robot (nodes and edges). Edges between graphs of different robots are solid blue.
+
+![pose_graph_colors](/images/multirobot/pose_graph_colors.png)
 
 Source code, along with sample launch and configuration files, are provided separately from the default SLAM Toolbox files. These can be found in dedicated multirobot directories.
 
