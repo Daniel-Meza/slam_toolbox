@@ -343,11 +343,6 @@ void LoopClosureAssistant::publishGraph()
   marray.markers.push_back(inter_robot_edge_marker);
   marray.markers.push_back(inter_robot_localization_edge_marker);
   marker_publisher_->publish(marray);
-
-  for (const auto & [sensor_name, marray] : m_sensor_name_to_marray) {
-    std::cout << sensor_name << std::endl;
-  }
-  std::cout << "---" << std::endl;
 }
 
 /*****************************************************************************/
