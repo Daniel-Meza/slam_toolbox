@@ -167,8 +167,8 @@ You can get away without a loss function if your odometry is good (i.e. likeliho
 SLAM Toolbox supports multi-robot SLAM.
 
 For operation, all robots must be part of the same transformation tree and provide accurate transformations between their base link frames and laser scan frames. They must start close to each other; the first robot to connect establishes the map frame origin and the relative starting poses of the other robots are determined using laser scan matching from the SLAM Toolbox solver. This setup enables all robots to contribute to a shared pose graph, making possible:
-- Localization of multiple Robots
-- Mapping using anformation from all available sensors
+- Localization of multiple robots
+- Mapping using information from all available sensors
 - Loop closure across paths from multiple robots
 - Robust and comprehensive map creation through collaborative SLAM
 
