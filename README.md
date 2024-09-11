@@ -178,9 +178,11 @@ Currently, both synchronous and asynchronous mapping is supported. Parameters `o
 
 Pose graph colors are randomly assigned for each robot (nodes and edges). Edges between graphs of different robots are solid blue.
 
-![pose_graph_colors](/images/multirobot/pose_graph_colors_2.png)
+![pose_graph_colors](/images/multirobot/pose_graph_colors.png)
 
-Source code, along with sample launch and configuration files, are provided separately from the default SLAM Toolbox files. These can be found in dedicated multirobot directories.
+Source code and launch files are provided separately from the default SLAM Toolbox files. These can be found in dedicated multirobot directories.
+
+A sample configuration file can be found [here](config/mapper_params_online_multirobot.yaml).
 
 # API
 
