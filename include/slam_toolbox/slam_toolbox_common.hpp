@@ -3,6 +3,7 @@
  * Copyright (c) 2008, Willow Garage, Inc.
  * Copyright Work Modifications (c) 2018, Simbe Robotics, Inc.
  * Copyright Work Modifications (c) 2019, Steve Macenski
+ * Copyright Work Modifications (c) 2024, Daniel I. Meza
  *
  * THE WORK (AS DEFINED BELOW) IS PROVIDED UNDER THE TERMS OF THIS CREATIVE
  * COMMONS PUBLIC LICENSE ("CCPL" OR "LICENSE"). THE WORK IS PROTECTED BY
@@ -76,7 +77,7 @@ protected:
   void setROSInterfaces();
 
   // callbacks
-  virtual void laserCallback(sensor_msgs::msg::LaserScan::ConstSharedPtr scan) = 0;
+  virtual void laserCallback(sensor_msgs::msg::LaserScan::ConstSharedPtr scan, const std::string & base_frame_id) = 0;
   bool mapCallback(
     const std::shared_ptr<rmw_request_id_t> request_header,
     const std::shared_ptr<nav_msgs::srv::GetMap::Request> req,
@@ -102,7 +103,8 @@ protected:
   bool updateMap();
   tf2::Stamped<tf2::Transform> setTransformFromPoses(
     const karto::Pose2 & pose,
-    const karto::Pose2 & karto_pose, const rclcpp::Time & t,
+    const karto::Pose2 & karto_pose,
+    const std_msgs::msg::Header & header,
     const bool & update_reprocessing_transform);
   karto::LocalizedRangeScan * getLocalizedRangeScan(
     karto::LaserRangeFinder * laser,
@@ -130,8 +132,8 @@ protected:
   std::unique_ptr<tf2_ros::Buffer> tf_;
   std::unique_ptr<tf2_ros::TransformListener> tfL_;
   std::unique_ptr<tf2_ros::TransformBroadcaster> tfB_;
-  std::unique_ptr<message_filters::Subscriber<sensor_msgs::msg::LaserScan>> scan_filter_sub_;
-  std::unique_ptr<tf2_ros::MessageFilter<sensor_msgs::msg::LaserScan>> scan_filter_;
+  std::vector<std::unique_ptr<message_filters::Subscriber<sensor_msgs::msg::LaserScan>>> scan_filter_subs_;
+  std::vector<std::unique_ptr<tf2_ros::MessageFilter<sensor_msgs::msg::LaserScan>>> scan_filters_;
   std::shared_ptr<rclcpp::Publisher<nav_msgs::msg::OccupancyGrid>> sst_;
   std::shared_ptr<rclcpp::Publisher<nav_msgs::msg::MapMetaData>> sstm_;
   std::shared_ptr<rclcpp::Publisher<geometry_msgs::msg::PoseWithCovarianceStamped>> pose_pub_;
@@ -141,7 +143,8 @@ protected:
   std::shared_ptr<rclcpp::Service<slam_toolbox::srv::DeserializePoseGraph>> ssDesserialize_;
 
   // Storage for ROS parameters
-  std::string odom_frame_, map_frame_, base_frame_, map_name_, scan_topic_;
+  std::string map_frame_, map_name_;
+  std::vector<std::string> odom_frames_, base_frames_, scan_topics_;
   bool use_map_saver_;
   rclcpp::Duration transform_timeout_, minimum_time_interval_;
   std_msgs::msg::Header scan_header;
@@ -156,18 +159,19 @@ protected:
   std::unique_ptr<mapper_utils::SMapper> smapper_;
   std::unique_ptr<karto::Dataset> dataset_;
   std::map<std::string, laser_utils::LaserMetadata> lasers_;
+  std::map<std::string, tf2::Transform> m_map_to_odoms_;
+  std::map<std::string, std::string> m_base_id_to_odom_id_, m_laser_id_to_base_id_;
 
   // helpers
-  std::unique_ptr<laser_utils::LaserAssistant> laser_assistant_;
-  std::unique_ptr<pose_utils::GetPoseHelper> pose_helper_;
+  std::map<std::string, std::unique_ptr<laser_utils::LaserAssistant>> laser_assistants_;
+  std::map<std::string, std::unique_ptr<pose_utils::GetPoseHelper>> pose_helpers_;
   std::unique_ptr<map_saver::MapSaver> map_saver_;
   std::unique_ptr<loop_closure_assistant::LoopClosureAssistant> closure_assistant_;
   std::unique_ptr<laser_utils::ScanHolder> scan_holder_;
 
   // Internal state
   std::vector<std::unique_ptr<boost::thread>> threads_;
-  tf2::Transform map_to_odom_;
-  boost::mutex map_to_odom_mutex_, smapper_mutex_, pose_mutex_;
+  boost::mutex map_to_odom_mutex_, smapper_mutex_, pose_mutex_, laser_id_map_mutex_;
   PausedState state_;
   nav_msgs::srv::GetMap::Response map_;
   ProcessType processor_type_;

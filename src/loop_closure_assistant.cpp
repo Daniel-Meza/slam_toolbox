@@ -1,6 +1,7 @@
 /*
  * loop_closure_assistant
  * Copyright (c) 2019, Samsung Research America
+ * Copyright Work Modifications (c) 2024, Daniel I. Meza
  *
  * THE WORK (AS DEFINED BELOW) IS PROVIDED UNDER THE TERMS OF THIS CREATIVE
  * COMMONS PUBLIC LICENSE ("CCPL" OR "LICENSE"). THE WORK IS PROTECTED BY
@@ -172,95 +173,175 @@ void LoopClosureAssistant::publishGraph()
     first_localization_id = localization_vertices.front().vertex->GetObject()->GetUniqueId();
   }
 
-  visualization_msgs::msg::MarkerArray marray;
+  std::map<karto::Name, visualization_msgs::msg::MarkerArray> m_sensor_name_to_marray;
 
-  // clear existing markers to account for any removed nodes
-  visualization_msgs::msg::Marker clear;
-  clear.header.stamp = node_->now();
-  clear.action = visualization_msgs::msg::Marker::DELETEALL;
-  marray.markers.push_back(clear);
-
-  visualization_msgs::msg::Marker m = vis_utils::toMarker(map_frame_, "slam_toolbox", 0.1, node_);
-
-  // add map nodes
+  // Initialize marker array for each robot
   for (const auto & sensor_name : vertices) {
-    for (const auto & vertex : sensor_name.second) {
-      m.color.g = vertex.first < first_localization_id ? 0.0 : 1.0;
-      const auto & pose = vertex.second->GetObject()->GetCorrectedPose();
-      m.id = vertex.first;
-      m.pose.position.x = pose.GetX();
-      m.pose.position.y = pose.GetY();
+    m_sensor_name_to_marray[sensor_name.first] = visualization_msgs::msg::MarkerArray();
+  }
 
+  std::map<karto::Name, visualization_msgs::msg::Marker> m_sensor_name_to_vertex_marker;
+
+  // Initialize vertex markers
+  visualization_msgs::msg::Marker vertex_marker;
+  vertex_marker.header.frame_id = map_frame_;
+  vertex_marker.header.stamp = node_->now();
+  vertex_marker.id = 0;
+  // vertex_marker.ns = "slam_toolbox_";
+  vertex_marker.action = visualization_msgs::msg::Marker::ADD;
+  vertex_marker.type = visualization_msgs::msg::Marker::SPHERE_LIST;
+  vertex_marker.scale.x = 0.1;
+  vertex_marker.scale.y = 0.1;
+  vertex_marker.scale.z = 0.1;
+  vertex_marker.color.a = 1;
+  vertex_marker.lifetime = rclcpp::Duration::from_seconds(0);
+  vertex_marker.points.reserve(vertices.size());
+
+  // Initialize vertex marker for each sensor name in the map
+  for (const auto & [sensor_name, nodes] : vertices) {
+    // Get random color for new robots
+    std::map<karto::Name, std_msgs::msg::ColorRGBA>::const_iterator map_it = m_sensor_name_to_color_.find(sensor_name);
+    if (map_it == m_sensor_name_to_color_.end()) {
+      m_sensor_name_to_color_[sensor_name] = generateNewColor();
+    }
+
+    // Parameters for each robot
+    vertex_marker.ns = "vertices" + sensor_name.ToString();
+    vertex_marker.color = m_sensor_name_to_color_[sensor_name];
+
+    m_sensor_name_to_vertex_marker[sensor_name] = vertex_marker;
+
+    // add map nodes
+    for (const auto & vertex : nodes) {
+      // m.color.g = vertex.first < first_localization_id ? 0.0 : 1.0;
+      const auto & pose = vertex.second->GetObject()->GetCorrectedPose();
+      geometry_msgs::msg::Point p;
+      p.x = pose.GetX();
+      p.y = pose.GetY();
+      
       if (interactive_mode && enable_interactive_mode_) {
         visualization_msgs::msg::InteractiveMarker int_marker =
-          vis_utils::toInteractiveMarker(m, 0.3, node_);
+          vis_utils::toInteractiveMarker(vertex_marker, 0.3, node_);
         interactive_server_->insert(int_marker,
           std::bind(
           &LoopClosureAssistant::processInteractiveFeedback,
           this, std::placeholders::_1));
       } else {
-        marray.markers.push_back(m);
+        m_sensor_name_to_vertex_marker[sensor_name].points.push_back(p);
       }
     }
   }
 
-  // add line markers for graph edges
-  visualization_msgs::msg::Marker edges_marker;
-  edges_marker.header.frame_id = map_frame_;
-  edges_marker.header.stamp = node_->now();
-  edges_marker.id = 0;
-  edges_marker.ns = "slam_toolbox_edges";
-  edges_marker.action = visualization_msgs::msg::Marker::ADD;
-  edges_marker.type = visualization_msgs::msg::Marker::LINE_LIST;
-  edges_marker.pose.orientation.w = 1;
-  edges_marker.scale.x = 0.05;
-  edges_marker.color.b = 1;
-  edges_marker.color.a = 1;
-  edges_marker.lifetime = rclcpp::Duration::from_seconds(0);
-  edges_marker.points.reserve(edges.size() * 2);
+  std::map<karto::Name, visualization_msgs::msg::Marker> m_sensor_name_to_edge_marker;
+  std::map<karto::Name, visualization_msgs::msg::Marker> m_sensor_name_to_localization_edge_marker;
 
-  visualization_msgs::msg::Marker localization_edges_marker;
-  localization_edges_marker.header.frame_id = map_frame_;
-  localization_edges_marker.header.stamp = node_->now();
-  localization_edges_marker.id = 1;
-  localization_edges_marker.ns = "slam_toolbox_edges";
-  localization_edges_marker.action = visualization_msgs::msg::Marker::ADD;
-  localization_edges_marker.type = visualization_msgs::msg::Marker::LINE_LIST;
-  localization_edges_marker.pose.orientation.w = 1;
-  localization_edges_marker.scale.x = 0.05;
-  localization_edges_marker.color.g = 1;
-  localization_edges_marker.color.b = 1;
-  localization_edges_marker.color.a = 1;
-  localization_edges_marker.lifetime = rclcpp::Duration::from_seconds(0);
-  localization_edges_marker.points.reserve(localization_vertices.size() * 3);
+  // Initialize edge markers for connections between nodes
+  // Edge marker
+  visualization_msgs::msg::Marker edge_marker;
+  edge_marker.header.frame_id = map_frame_;
+  edge_marker.header.stamp = node_->now();
+  edge_marker.id = 0;
+  // edge_marker.ns = "slam_toolbox_edges";
+  edge_marker.action = visualization_msgs::msg::Marker::ADD;
+  edge_marker.type = visualization_msgs::msg::Marker::LINE_LIST;
+  edge_marker.pose.orientation.w = 1;
+  edge_marker.scale.x = 0.05;
+  edge_marker.color.b = 1;
+  edge_marker.color.a = 1;
+  edge_marker.lifetime = rclcpp::Duration::from_seconds(0);
+  edge_marker.points.reserve(edges.size());
 
+  // Localization edge marker
+  visualization_msgs::msg::Marker localization_edge_marker;
+  localization_edge_marker.header.frame_id = map_frame_;
+  localization_edge_marker.header.stamp = node_->now();
+  localization_edge_marker.id = 1;
+  // localization_edge_marker.ns = "slam_toolbox_edges";
+  localization_edge_marker.action = visualization_msgs::msg::Marker::ADD;
+  localization_edge_marker.type = visualization_msgs::msg::Marker::LINE_LIST;
+  localization_edge_marker.pose.orientation.w = 1;
+  localization_edge_marker.scale.x = 0.05;
+  localization_edge_marker.color.g = 1;
+  localization_edge_marker.color.b = 1;
+  localization_edge_marker.color.a = 1;
+  localization_edge_marker.lifetime = rclcpp::Duration::from_seconds(0);
+  localization_edge_marker.points.reserve(localization_vertices.size());
+
+  // Initialize edge marker for inter robot connections
+  auto inter_robot_markers_name = karto::Name("inter_robot_edges");
+
+  visualization_msgs::msg::Marker inter_robot_edge_marker = edge_marker;
+  inter_robot_edge_marker.ns = inter_robot_markers_name.ToString();
+
+  visualization_msgs::msg::Marker inter_robot_localization_edge_marker = localization_edge_marker;
+  inter_robot_localization_edge_marker.ns = inter_robot_markers_name.ToString();
+
+  // Initialize edge marker for each sensor name in the map
+  for (const auto & [sensor_name, marray] : m_sensor_name_to_marray) {
+      edge_marker.ns = "edges" + sensor_name.ToString();
+      edge_marker.color = m_sensor_name_to_color_[sensor_name];
+      edge_marker.color.a = 0.7;
+
+      localization_edge_marker.ns = "edges" + sensor_name.ToString();
+      localization_edge_marker.color = m_sensor_name_to_color_[sensor_name];
+      localization_edge_marker.color.a = 0.7;
+
+    m_sensor_name_to_edge_marker[sensor_name] = edge_marker;
+    m_sensor_name_to_localization_edge_marker[sensor_name] = localization_edge_marker;
+  }
+
+  // add node edges
   for (const auto & edge : edges) {
     int source_id = edge->GetSource()->GetObject()->GetUniqueId();
+    karto::Name source_sensor_name = edge->GetSource()->GetObject()->GetSensorName();
     const auto & pose0 = edge->GetSource()->GetObject()->GetCorrectedPose();
     geometry_msgs::msg::Point p0;
     p0.x = pose0.GetX();
     p0.y = pose0.GetY();
 
     int target_id = edge->GetTarget()->GetObject()->GetUniqueId();
+    karto::Name target_sensor_name = edge->GetTarget()->GetObject()->GetSensorName();
     const auto & pose1 = edge->GetTarget()->GetObject()->GetCorrectedPose();
     geometry_msgs::msg::Point p1;
     p1.x = pose1.GetX();
     p1.y = pose1.GetY();
 
     if (source_id >= first_localization_id || target_id >= first_localization_id) {
-      localization_edges_marker.points.push_back(p0);
-      localization_edges_marker.points.push_back(p1);
+      if (source_sensor_name == target_sensor_name) {
+        m_sensor_name_to_localization_edge_marker[source_sensor_name].points.push_back(p0);
+        m_sensor_name_to_localization_edge_marker[source_sensor_name].points.push_back(p1);
+      }
+      else {
+        inter_robot_localization_edge_marker.points.push_back(p0);
+        inter_robot_edge_marker.points.push_back(p1);
+      }
     } else {
-      edges_marker.points.push_back(p0);
-      edges_marker.points.push_back(p1);
+      if (source_sensor_name.ToString() == target_sensor_name.ToString()) {
+        m_sensor_name_to_edge_marker[source_sensor_name].points.push_back(p0);
+        m_sensor_name_to_edge_marker[source_sensor_name].points.push_back(p1);
+      }
+      else {
+        inter_robot_edge_marker.points.push_back(p0);
+        inter_robot_edge_marker.points.push_back(p1);
+      }
     }
   }
 
-  marray.markers.push_back(edges_marker);
-  marray.markers.push_back(localization_edges_marker);
-
   // if disabled, clears out old markers
   interactive_server_->applyChanges();
+
+  // Push markers for each robot and their connections
+  for (const auto & [sensor_name, marray] : m_sensor_name_to_marray) {
+    m_sensor_name_to_marray[sensor_name].markers.push_back(m_sensor_name_to_vertex_marker[sensor_name]);
+    m_sensor_name_to_marray[sensor_name].markers.push_back(m_sensor_name_to_edge_marker[sensor_name]);
+    m_sensor_name_to_marray[sensor_name].markers.push_back(m_sensor_name_to_localization_edge_marker[sensor_name]);
+    marker_publisher_->publish(marray);
+  }
+
+  // Push markers for inter robot connections
+  visualization_msgs::msg::MarkerArray marray;
+  marray.markers.push_back(inter_robot_edge_marker);
+  marray.markers.push_back(inter_robot_localization_edge_marker);
   marker_publisher_->publish(marray);
 }
 
@@ -398,6 +479,20 @@ void LoopClosureAssistant::addMovedNodes(const int & id, Eigen::Vector3d vec)
     "pose has been recorded.",id);
   boost::mutex::scoped_lock lock(moved_nodes_mutex_);
   moved_nodes_[id] = vec;
+}
+
+/*****************************************************************************/
+std_msgs::msg::ColorRGBA LoopClosureAssistant::generateNewColor()
+/*****************************************************************************/
+{
+  // Generate random color
+  std_msgs::msg::ColorRGBA color;     // ranges are from 0.0 - 1.0
+  color.r = (float)(std::abs(rand()) % 256) / 256;
+  color.g = (float)(std::abs(rand()) % 256) / 256;
+  color.b = (float)(std::abs(rand()) % 256) / 256;
+  color.a = 1;
+
+  return color;
 }
 
 }  // namespace loop_closure_assistant

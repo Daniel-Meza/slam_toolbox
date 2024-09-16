@@ -35,7 +35,7 @@ public:
   void run();
 
 protected:
-  void laserCallback(sensor_msgs::msg::LaserScan::ConstSharedPtr scan) override;
+  void laserCallback(sensor_msgs::msg::LaserScan::ConstSharedPtr scan, const std::string & base_frame_id) override;
   bool clearQueueCallback(
     const std::shared_ptr<rmw_request_id_t> request_header,
     const std::shared_ptr<slam_toolbox::srv::ClearQueue::Request> req,

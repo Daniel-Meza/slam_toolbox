@@ -41,7 +41,7 @@ int main(int argc, char ** argv)
   }
 
   rclcpp::NodeOptions options;
-  auto async_node = std::make_shared<slam_toolbox::AsynchronousSlamToolbox>(options);
+  auto async_node = std::make_shared<slam_toolbox::AsynchronousSlamToolbox>(options);   // TODO Make this multithreaded so each subscriber callback can run in parallel?
   async_node->configure();
   async_node->loadPoseGraphByParams();
   rclcpp::spin(async_node->get_node_base_interface());
