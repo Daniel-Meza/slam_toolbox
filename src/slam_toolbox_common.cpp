@@ -2,6 +2,7 @@
  * slam_toolbox
  * Copyright Work Modifications (c) 2018, Simbe Robotics, Inc.
  * Copyright Work Modifications (c) 2019, Samsung Research America
+ * Copyright Work Modifications (c) 2024, Daniel I. Meza
  *
  * THE WORK (AS DEFINED BELOW) IS PROVIDED UNDER THE TERMS OF THIS CREATIVE
  * COMMONS PUBLIC LICENSE ("CCPL" OR "LICENSE"). THE WORK IS PROTECTED BY
@@ -109,6 +110,16 @@ CallbackReturn SlamToolbox::on_configure(const rclcpp_lifecycle::State &)
   setParams();
   setSolver();
 
+  // Ensure right number of parameters were given
+  if (base_frames_.size() != scan_topics_.size()) {
+    RCLCPP_FATAL(get_logger(), "base_frames_.size() != laser_topics_.size()");
+    throw(std::runtime_error("Incorrect settings for parameters"));   // kill execution
+  }
+  if(base_frames_.size() != odom_frames_.size()) {
+    RCLCPP_FATAL(get_logger(), "base_frames_.size() != odom_frames_.size()");
+    throw(std::runtime_error("Incorrect settings for parameters"));   // kill execution
+  }
+
   double tmp_val = 30.0;
   if (!this->has_parameter("tf_buffer_duration")) {
     this->declare_parameter("tf_buffer_duration", tmp_val);
@@ -122,10 +133,11 @@ CallbackReturn SlamToolbox::on_configure(const rclcpp_lifecycle::State &)
   tf_->setCreateTimerInterface(timer_interface);
   tfL_ = std::make_unique<tf2_ros::TransformListener>(*tf_);
   tfB_ = std::make_unique<tf2_ros::TransformBroadcaster>(shared_from_this());
-  laser_assistant_ = std::make_unique<laser_utils::LaserAssistant>(
-    shared_from_this(), tf_.get(), base_frame_);
-  pose_helper_ = std::make_unique<pose_utils::GetPoseHelper>(
-    tf_.get(), base_frame_, odom_frame_);
+  for (size_t idx = 0; idx < base_frames_.size(); idx++) {
+    m_base_id_to_odom_id_[base_frames_[idx]] = odom_frames_[idx];
+    // laser_assistants_[base_frames_[idx]] = std::make_unique<laser_utils::LaserAssistant>(shared_from_this(), tf_.get(), base_frames_[idx]);
+    pose_helpers_[base_frames_[idx]] = std::make_unique<pose_utils::GetPoseHelper>(tf_.get(), base_frames_[idx], odom_frames_[idx]);
+  }
   scan_holder_ = std::make_unique<laser_utils::ScanHolder>(lasers_);
   if (use_map_saver_) {
     map_saver_ = std::make_unique<map_saver::MapSaver>(shared_from_this(),
@@ -186,8 +198,12 @@ CallbackReturn SlamToolbox::on_deactivate(const rclcpp_lifecycle::State &)
   pose_pub_->on_deactivate();
 
   // reset interfaces
-  scan_filter_.reset();
-  scan_filter_sub_.reset();
+  for(auto & it : scan_filters_) {
+    it.reset();
+  }
+  for (auto & it : scan_filter_subs_) {
+    it.reset();
+  }
   ssDesserialize_.reset();
   ssSerialize_.reset();
   ssPauseMeasurements_.reset();
@@ -214,8 +230,14 @@ CallbackReturn SlamToolbox::on_cleanup(const rclcpp_lifecycle::State &)
   smapper_.reset();
   dataset_.reset();
   map_saver_.reset();
-  pose_helper_.reset();
-  laser_assistant_.reset();
+  for(std::map<std::string, std::unique_ptr<pose_utils::GetPoseHelper>>::iterator it = pose_helpers_.begin(); it != pose_helpers_.end(); it++)
+  {
+    it->second.reset();
+  }
+  for(std::map<std::string, std::unique_ptr<laser_utils::LaserAssistant>>::iterator it = laser_assistants_.begin(); it != laser_assistants_.end(); it++)
+  {
+    it->second.reset();
+  }
   scan_holder_.reset();
   solver_.reset();
 
@@ -251,13 +273,22 @@ SlamToolbox::~SlamToolbox()
   dataset_.reset();
   closure_assistant_.reset();
   map_saver_.reset();
-  pose_helper_.reset();
-  laser_assistant_.reset();
+  for(std::map<std::string, std::unique_ptr<pose_utils::GetPoseHelper>>::iterator it = pose_helpers_.begin(); it != pose_helpers_.end(); it++)
+  {
+    it->second.reset();
+  }
+  for(std::map<std::string, std::unique_ptr<laser_utils::LaserAssistant>>::iterator it = laser_assistants_.begin(); it != laser_assistants_.end(); it++)
+  {
+    it->second.reset();
+  }
   scan_holder_.reset();
   solver_.reset();
-
-  scan_filter_.reset();
-  scan_filter_sub_.reset();
+  for(auto & it : scan_filters_) {
+    it.reset();
+  }
+  for (auto & it : scan_filter_subs_) {
+    it.reset();
+  }
   ssDesserialize_.reset();
   ssSerialize_.reset();
   ssPauseMeasurements_.reset();
@@ -302,12 +333,16 @@ void SlamToolbox::setSolver()
 void SlamToolbox::setParams()
 /*****************************************************************************/
 {
-  map_to_odom_.setIdentity();
-  odom_frame_ = std::string("odom");
-  if (!this->has_parameter("odom_frame")) {
-    this->declare_parameter("odom_frame", odom_frame_);
+  for(std::map<std::string, tf2::Transform>::iterator it = m_map_to_odoms_.begin(); it != m_map_to_odoms_.end(); it++)
+  {
+    it->second.setIdentity();
   }
-  odom_frame_ = this->get_parameter("odom_frame").as_string();
+
+  odom_frames_ = std::vector<std::string>{"odom"};
+  if (!this->has_parameter("odom_frames")) {
+    this->declare_parameter("odom_frames", odom_frames_);
+  }
+  odom_frames_ = this->get_parameter("odom_frames").as_string_array();
 
   map_frame_ = std::string("map");
   if (!this->has_parameter("map_frame")) {
@@ -315,11 +350,11 @@ void SlamToolbox::setParams()
   }
   map_frame_ = this->get_parameter("map_frame").as_string();
 
-  base_frame_ = std::string("base_footprint");
-  if (!this->has_parameter("base_frame")) {
-    this->declare_parameter("base_frame", base_frame_);
+  base_frames_ = std::vector<std::string>{"base_footprint"};
+  if (!this->has_parameter("base_frames")) {
+    this->declare_parameter("base_frames", base_frames_);
   }
-  base_frame_ = this->get_parameter("base_frame").as_string();
+  base_frames_ = this->get_parameter("base_frames").as_string_array();
 
   resolution_ = 0.05;
   if (!this->has_parameter("resolution")) {
@@ -351,11 +386,11 @@ void SlamToolbox::setParams()
   }
   use_lifecycle_manager_ = this->get_parameter("use_lifecycle_manager").as_bool();
 
-  scan_topic_ = std::string("/scan");
-  if (!this->has_parameter("scan_topic")) {
-    this->declare_parameter("scan_topic", scan_topic_);
+  scan_topics_ = std::vector<std::string>{"/scan"};
+  if (!this->has_parameter("scan_topics")) {
+    this->declare_parameter("scan_topics", scan_topics_);
   }
-  scan_topic_ = this->get_parameter("scan_topic").as_string();
+  scan_topics_ = this->get_parameter("scan_topics").as_string_array();
 
   scan_queue_size_ = 1;
   if (!this->has_parameter("scan_queue_size")) {
@@ -374,6 +409,7 @@ void SlamToolbox::setParams()
       "this isn't allowed so it will be set to default value 1.");
     throttle_scans_ = 1;
   }
+
   position_covariance_scale_ = 1.0;
   if (!this->has_parameter("position_covariance_scale")) {
     this->declare_parameter("position_covariance_scale", position_covariance_scale_);
@@ -397,6 +433,7 @@ void SlamToolbox::setParams()
     this->declare_parameter("transform_timeout", tmp_val);
   }
   tmp_val = this->get_parameter("transform_timeout").as_double();
+
   transform_timeout_ = rclcpp::Duration::from_seconds(tmp_val);
   if (!this->has_parameter("minimum_time_interval")) {
     this->declare_parameter("minimum_time_interval", tmp_val);
@@ -453,17 +490,15 @@ void SlamToolbox::setROSInterfaces()
     std::bind(&SlamToolbox::resetCallback, this,
     std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
 
-  scan_filter_sub_ =
-    std::make_unique<message_filters::Subscriber<sensor_msgs::msg::LaserScan,
-      rclcpp_lifecycle::LifecycleNode>>(
-    shared_from_this().get(), scan_topic_, rmw_qos_profile_sensor_data);
-  scan_filter_ =
-    std::make_unique<tf2_ros::MessageFilter<sensor_msgs::msg::LaserScan>>(
-    *scan_filter_sub_, *tf_, odom_frame_, scan_queue_size_,
-    get_node_logging_interface(), get_node_clock_interface(),
-    tf2::durationFromSec(transform_timeout_.seconds()));
-  scan_filter_->registerCallback(
-    std::bind(&SlamToolbox::laserCallback, this, std::placeholders::_1));
+  for (size_t idx = 0; idx < scan_topics_.size(); idx++) {
+    // RCLCPP_INFO(get_logger(), "Subscribing to scan: %s", scan_topics_[idx].c_str());
+    scan_filter_subs_.push_back(
+      std::make_unique<message_filters::Subscriber<sensor_msgs::msg::LaserScan, rclcpp_lifecycle::LifecycleNode>>(shared_from_this().get(), scan_topics_[idx], rmw_qos_profile_sensor_data));
+    scan_filters_.push_back(
+      std::make_unique<tf2_ros::MessageFilter<sensor_msgs::msg::LaserScan>>(*scan_filter_subs_.back(), *tf_, odom_frames_[idx], scan_queue_size_, get_node_logging_interface(), get_node_clock_interface(), tf2::durationFromSec(transform_timeout_.seconds())));
+    scan_filters_.back()->registerCallback(
+      std::bind(&SlamToolbox::laserCallback, this, std::placeholders::_1, base_frames_[idx]));
+  }
 }
 
 
@@ -480,16 +515,26 @@ void SlamToolbox::publishTransformLoop(
   while (rclcpp::ok()) {
     boost::this_thread::interruption_point();
     {
-      boost::mutex::scoped_lock lock(map_to_odom_mutex_);
-      rclcpp::Time scan_timestamp = scan_header.stamp;
-      // Avoid publishing tf with initial 0.0 scan timestamp
-      if (scan_timestamp.seconds() > 0.0 && !scan_header.frame_id.empty()) {
-        geometry_msgs::msg::TransformStamped msg;
-        msg.transform = tf2::toMsg(map_to_odom_);
-        msg.child_frame_id = odom_frame_;
-        msg.header.frame_id = map_frame_;
-        msg.header.stamp = scan_timestamp + transform_timeout_;
-        tfB_->sendTransform(msg);
+      // Create a copy of map-to-odom TFs map
+      std::map<std::string, tf2::Transform> local_TFs_map;
+      {
+        boost::mutex::scoped_lock lock(map_to_odom_mutex_);
+        local_TFs_map = m_map_to_odoms_;
+      }
+
+      // Publish all past and current transforms so none of them go stale
+      std::map<std::string, tf2::Transform>::const_iterator iter;
+      for (iter = local_TFs_map.begin(); iter != local_TFs_map.end(); iter++) {
+        rclcpp::Time scan_timestamp = scan_header.stamp;
+        // Avoid publishing tf with initial 0.0 scan timestamp
+        if (scan_timestamp.seconds() > 0.0 && !scan_header.frame_id.empty()) {
+          geometry_msgs::msg::TransformStamped msg;
+          msg.transform = tf2::toMsg(iter->second);
+          msg.child_frame_id = iter->first;
+          msg.header.frame_id = map_frame_;
+          msg.header.stamp = scan_timestamp + transform_timeout_;
+          tfB_->sendTransform(msg);
+        }
       }
     }
     r.sleep();
@@ -614,7 +659,13 @@ LaserRangeFinder * SlamToolbox::getLaser(
   const std::string & frame = scan->header.frame_id;
   if (lasers_.find(frame) == lasers_.end()) {
     try {
-      lasers_[frame] = laser_assistant_->toLaserMetadata(*scan);
+      // Use laser scan ID to get base frame ID
+      std::map<std::string, std::unique_ptr<laser_utils::LaserAssistant>>::const_iterator it = laser_assistants_.find(frame);
+      if (it == laser_assistants_.end()) {
+        RCLCPP_ERROR(get_logger(), "Failed to get requested laser assistant, aborting initialization (%s)", frame.c_str());
+        return nullptr;
+      }
+      lasers_[frame] = it->second->toLaserMetadata(*scan);
       dataset_->Add(lasers_[frame].getLaser(), true);
     } catch (tf2::TransformException & e) {
       RCLCPP_ERROR(get_logger(), "Failed to compute laser pose, "
@@ -657,17 +708,30 @@ bool SlamToolbox::updateMap()
 tf2::Stamped<tf2::Transform> SlamToolbox::setTransformFromPoses(
   const Pose2 & corrected_pose,
   const Pose2 & odom_pose,
-  const rclcpp::Time & t,
+  const std_msgs::msg::Header & header,
   const bool & update_reprocessing_transform)
 /*****************************************************************************/
 {
+  // Use the laserscan frame to look up base and odom frame
+  std::string base_frame;
+  {
+    boost::mutex::scoped_lock l(laser_id_map_mutex_);
+    std::map<std::string, std::string>::const_iterator it = m_laser_id_to_base_id_.find(header.frame_id);
+    if (it == m_laser_id_to_base_id_.end()) {
+      RCLCPP_ERROR(get_logger(), "Requested laser frame ID not in map: %s", header.frame_id.c_str());
+        return tf2::Stamped<tf2::Transform>();
+    }
+    base_frame = it->second;
+  }
+  const std::string & odom_frame = m_base_id_to_odom_id_[base_frame];
+
   // Compute the map->odom transform
   tf2::Stamped<tf2::Transform> odom_to_map;
   tf2::Quaternion q(0., 0., 0., 1.0);
   q.setRPY(0., 0., corrected_pose.GetHeading());
   tf2::Stamped<tf2::Transform> base_to_map(
     tf2::Transform(q, tf2::Vector3(corrected_pose.GetX(),
-    corrected_pose.GetY(), 0.0)).inverse(), tf2_ros::fromMsg(t), base_frame_);
+    corrected_pose.GetY(), 0.0)).inverse(), tf2_ros::fromMsg(header.stamp), base_frame);
   try {
     geometry_msgs::msg::TransformStamped base_to_map_msg, odom_to_map_msg;
 
@@ -681,7 +745,7 @@ tf2::Stamped<tf2::Transform> SlamToolbox::setTransformFromPoses(
     base_to_map_msg.transform.translation.z = base_to_map.getOrigin().getZ();
     base_to_map_msg.transform.rotation = tf2::toMsg(base_to_map.getRotation());
 
-    odom_to_map_msg = tf_->transform(base_to_map_msg, odom_frame_);
+    odom_to_map_msg = tf_->transform(base_to_map_msg, odom_frame);
     tf2::fromMsg(odom_to_map_msg, odom_to_map);
   } catch (tf2::TransformException & e) {
     RCLCPP_ERROR(get_logger(), "Transform from base_link to odom failed: %s",
@@ -705,7 +769,7 @@ tf2::Stamped<tf2::Transform> SlamToolbox::setTransformFromPoses(
 
   // set map to odom for our transformation thread to publish
   boost::mutex::scoped_lock lock(map_to_odom_mutex_);
-  map_to_odom_ = tf2::Transform(tf2::Quaternion(odom_to_map.getRotation() ),
+  m_map_to_odoms_[odom_frame] = tf2::Transform(tf2::Quaternion(odom_to_map.getRotation() ),
       tf2::Vector3(odom_to_map.getOrigin() ) ).inverse();
 
   return odom_to_map;
@@ -742,18 +806,30 @@ bool SlamToolbox::shouldProcessScan(
   const Pose2 & pose)
 /*****************************************************************************/
 {
-  static Pose2 last_pose;
-  static rclcpp::Time last_scan_time = rclcpp::Time(0.);
+  static std::vector<std::string> scan_frame_ids;
+  static std::map<std::string, Pose2> last_poses;
+  static std::map<std::string, rclcpp::Time> last_scan_times;
   static double min_dist2 =
     smapper_->getMapper()->getParamMinimumTravelDistance() *
     smapper_->getMapper()->getParamMinimumTravelDistance();
-  static int scan_ctr = 0;
-  scan_ctr++;
+
+  // Check if frame id of current scan is new
+  bool new_scan_frame_id = false;
+  std::string cur_frame_id = scan->header.frame_id;
+  if (std::find(scan_frame_ids.begin(), scan_frame_ids.end(), cur_frame_id) == scan_frame_ids.end()) {
+    // New scan
+    new_scan_frame_id = true;
+    scan_frame_ids.push_back(cur_frame_id);
+    last_scan_times[cur_frame_id] = rclcpp::Time(0.);
+  }
+
+  static std::map<std::string, int> scan_ctrs;
+  scan_ctrs[cur_frame_id]++;
 
   // we give it a pass on the first measurement to get the ball rolling
-  if (first_measurement_) {
-    last_scan_time = scan->header.stamp;
-    last_pose = pose;
+  if (first_measurement_ || new_scan_frame_id) {
+    last_scan_times[cur_frame_id] = scan->header.stamp;
+    last_poses[cur_frame_id] = pose;
     first_measurement_ = false;
     return true;
   }
@@ -764,23 +840,23 @@ bool SlamToolbox::shouldProcessScan(
   }
 
   // throttled out
-  if ((scan_ctr % throttle_scans_) != 0) {
+  if ((scan_ctrs[cur_frame_id] % throttle_scans_) != 0) {
     return false;
   }
 
   // not enough time
-  if (rclcpp::Time(scan->header.stamp) - last_scan_time < minimum_time_interval_) {
+  if (rclcpp::Time(scan->header.stamp) - last_scan_times[cur_frame_id] < minimum_time_interval_) {
     return false;
   }
 
   // check moved enough, within 10% for correction error
-  const double dist2 = last_pose.SquaredDistance(pose);
-  if (dist2 < 0.8 * min_dist2 || scan_ctr < 5) {
+  const double dist2 = last_poses[cur_frame_id].SquaredDistance(pose);
+  if (dist2 < 0.8 * min_dist2 || scan_ctrs[cur_frame_id] < 5) {
     return false;
   }
 
-  last_pose = pose;
-  last_scan_time = scan->header.stamp;
+  last_poses[cur_frame_id] = pose;
+  last_scan_times[cur_frame_id] = scan->header.stamp;
 
   return true;
 }
@@ -846,7 +922,7 @@ LocalizedRangeScan * SlamToolbox::addScan(
     }
 
     setTransformFromPoses(range_scan->GetCorrectedPose(), odom_pose,
-      scan->header.stamp, update_reprocessing_transform);
+      scan->header, update_reprocessing_transform);
     dataset_->Add(range_scan);
 
     publishPose(range_scan->GetCorrectedPose(), covariance, scan->header.stamp);
