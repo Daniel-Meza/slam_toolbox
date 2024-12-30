@@ -155,8 +155,7 @@ protected:
   std::vector<std::unique_ptr<tf2_ros::MessageFilter<sensor_msgs::msg::LaserScan>>> scan_filters_;
   std::shared_ptr<rclcpp_lifecycle::LifecyclePublisher<nav_msgs::msg::OccupancyGrid>> sst_;
   std::shared_ptr<rclcpp_lifecycle::LifecyclePublisher<nav_msgs::msg::MapMetaData>> sstm_;
-  std::shared_ptr<rclcpp_lifecycle::LifecyclePublisher<
-      geometry_msgs::msg::PoseWithCovarianceStamped>> pose_pub_;
+  std::shared_ptr<rclcpp_lifecycle::LifecyclePublisher<geometry_msgs::msg::PoseWithCovarianceStamped>> pose_pub_;
   std::shared_ptr<rclcpp::Service<nav_msgs::srv::GetMap>> ssMap_;
   std::shared_ptr<rclcpp::Service<slam_toolbox::srv::Pause>> ssPauseMeasurements_;
   std::shared_ptr<rclcpp::Service<slam_toolbox::srv::SerializePoseGraph>> ssSerialize_;

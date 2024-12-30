@@ -1,6 +1,7 @@
 /*
  * laser_utils
  * Copyright (c) 2019, Samsung Research America
+ * Copyright Work Modifications (c) 2024, Daniel I. Meza
  *
  * THE WORK (AS DEFINED BELOW) IS PROVIDED UNDER THE TERMS OF THIS CREATIVE
  * COMMONS PUBLIC LICENSE ("CCPL" OR "LICENSE"). THE WORK IS PROTECTED BY
@@ -97,7 +98,7 @@ karto::LaserRangeFinder * LaserAssistant::makeLaser(const double & mountingYaw)
 {
   karto::LaserRangeFinder * laser =
     karto::LaserRangeFinder::CreateLaserRangeFinder(
-    karto::LaserRangeFinder_Custom, karto::Name("Custom Described Lidar"));
+    karto::LaserRangeFinder_Custom, karto::Name(scan_.header.frame_id)); // more descriptive
   laser->SetOffsetPose(karto::Pose2(laser_pose_.transform.translation.x,
     laser_pose_.transform.translation.y, mountingYaw));
   laser->SetMinimumRange(scan_.range_min);

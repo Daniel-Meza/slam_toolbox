@@ -1,6 +1,7 @@
 /*
  * loop_closure_assistant
  * Copyright (c) 2019, Samsung Research America
+ * Copyright Work Modifications (c) 2024, Daniel I. Meza
  *
  * THE WORK (AS DEFINED BELOW) IS PROVIDED UNDER THE TERMS OF THIS CREATIVE
  * COMMONS PUBLIC LICENSE ("CCPL" OR "LICENSE"). THE WORK IS PROTECTED BY
@@ -73,6 +74,7 @@ private:
 
   void moveNode(const int& id, const Eigen::Vector3d& pose);
   void addMovedNodes(const int& id, Eigen::Vector3d vec);
+  std_msgs::msg::ColorRGBA generateNewColor();
 
   std::unique_ptr<tf2_ros::TransformBroadcaster> tfB_;
   laser_utils::ScanHolder * scan_holder_;
@@ -95,6 +97,8 @@ private:
   rclcpp::Clock::SharedPtr clock_;
   rclcpp::Logger logger_;
   rclcpp::node_interfaces::NodeParametersInterface::SharedPtr parameters_interface_;
+
+  std::map<karto::Name, std_msgs::msg::ColorRGBA> m_sensor_name_to_color_;
 };
 
 }   // namespace loop_closure_assistant

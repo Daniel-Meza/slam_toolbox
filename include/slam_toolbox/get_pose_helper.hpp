@@ -1,6 +1,7 @@
 /*
  * snap_utils
  * Copyright (c) 2019, Samsung Research America
+ * Copyright Work Modification (c) 2024, Daniel I. Meza
  *
  * THE WORK (AS DEFINED BELOW) IS PROVIDED UNDER THE TERMS OF THIS CREATIVE
  * COMMONS PUBLIC LICENSE ("CCPL" OR "LICENSE"). THE WORK IS PROTECTED BY
@@ -41,6 +42,31 @@ public:
 
   bool getOdomPose(karto::Pose2 & karto_pose, const rclcpp::Time & t)
   {
+    geometry_msgs::msg::TransformStamped base_ident, odom_pose;
+    base_ident.header.stamp = t;
+    base_ident.header.frame_id = base_frame_;
+    base_ident.transform.rotation.w = 1.0;
+
+    try {
+      odom_pose = tf_->transform(base_ident, odom_frame_);
+    } catch (tf2::TransformException & e) {
+      return false;
+    }
+
+    const double yaw = tf2::getYaw(odom_pose.transform.rotation);
+    karto_pose = karto::Pose2(odom_pose.transform.translation.x,
+        odom_pose.transform.translation.y, yaw);
+
+    return true;
+  }
+
+  bool getOdomPose(karto::Pose2 & karto_pose, const rclcpp::Time & t, std::string ref_frame)
+  {
+    // Ensure the right pose helper is being called
+    if (ref_frame != base_frame_) {
+      return false;
+    }
+
     geometry_msgs::msg::TransformStamped base_ident, odom_pose;
     base_ident.header.stamp = t;
     base_ident.header.frame_id = base_frame_;
