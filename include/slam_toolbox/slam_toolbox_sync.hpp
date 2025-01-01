@@ -2,6 +2,7 @@
  * slam_toolbox
  * Copyright Work Modifications (c) 2018, Simbe Robotics, Inc.
  * Copyright Work Modifications (c) 2019, Steve Macenski
+ * Copyright Work Modifications (c) 2024, Daniel I. Meza
  *
  * THE WORK (AS DEFINED BELOW) IS PROVIDED UNDER THE TERMS OF THIS CREATIVE
  * COMMONS PUBLIC LICENSE ("CCPL" OR "LICENSE"). THE WORK IS PROTECTED BY
@@ -37,7 +38,7 @@ public:
   CallbackReturn on_deactivate(const rclcpp_lifecycle::State & state) override;
 
 protected:
-  void laserCallback(sensor_msgs::msg::LaserScan::ConstSharedPtr scan) override;
+  void laserCallback(sensor_msgs::msg::LaserScan::ConstSharedPtr scan, const std::string & base_frame_id) override;
   bool clearQueueCallback(
     const std::shared_ptr<rmw_request_id_t> request_header,
     const std::shared_ptr<slam_toolbox::srv::ClearQueue::Request> req,
