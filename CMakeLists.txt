@@ -76,7 +76,7 @@ set(libraries
     ceres_solver_plugin
     async_slam_toolbox
     sync_slam_toolbox
-    # localization_slam_toolbox
+    localization_slam_toolbox
     # lifelong_slam_toolbox
     # map_and_localization_slam_toolbox
 )
@@ -167,10 +167,10 @@ target_link_libraries(sync_slam_toolbox toolbox_common kartoSlamToolbox ${Boost_
 add_executable(sync_slam_toolbox_node src/slam_toolbox_sync_node.cpp)
 target_link_libraries(sync_slam_toolbox_node sync_slam_toolbox)
 
-# add_library(localization_slam_toolbox src/slam_toolbox_localization.cpp)
-# target_link_libraries(localization_slam_toolbox toolbox_common kartoSlamToolbox ${Boost_LIBRARIES})
-# add_executable(localization_slam_toolbox_node src/slam_toolbox_localization_node.cpp)
-# target_link_libraries(localization_slam_toolbox_node localization_slam_toolbox)
+add_library(localization_slam_toolbox src/slam_toolbox_localization.cpp)
+target_link_libraries(localization_slam_toolbox toolbox_common kartoSlamToolbox ${Boost_LIBRARIES})
+add_executable(localization_slam_toolbox_node src/slam_toolbox_localization_node.cpp)
+target_link_libraries(localization_slam_toolbox_node localization_slam_toolbox)
 
 # add_library(lifelong_slam_toolbox src/experimental/slam_toolbox_lifelong.cpp)
 # target_link_libraries(lifelong_slam_toolbox toolbox_common kartoSlamToolbox ${Boost_LIBRARIES})
@@ -198,14 +198,14 @@ target_link_libraries(merge_maps_kinematic kartoSlamToolbox toolbox_common)
 
 rclcpp_components_register_nodes(async_slam_toolbox "slam_toolbox::AsynchronousSlamToolbox")
 rclcpp_components_register_nodes(sync_slam_toolbox "slam_toolbox::SynchronousSlamToolbox")
-# rclcpp_components_register_nodes(localization_slam_toolbox "slam_toolbox::LocalizationSlamToolbox")
+rclcpp_components_register_nodes(localization_slam_toolbox "slam_toolbox::LocalizationSlamToolbox")
 # rclcpp_components_register_nodes(lifelong_slam_toolbox "slam_toolbox::LifelongSlamToolbox")
 # rclcpp_components_register_nodes(map_and_localization_slam_toolbox "slam_toolbox::MapAndLocalizationSlamToolbox")
 
 #### Install
 install(TARGETS async_slam_toolbox_node
                 sync_slam_toolbox_node
-                # localization_slam_toolbox_node
+                localization_slam_toolbox_node
                 # map_and_localization_slam_toolbox_node
                 # lifelong_slam_toolbox_node
                 merge_maps_kinematic

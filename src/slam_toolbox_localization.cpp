@@ -1,6 +1,7 @@
 /*
  * slam_toolbox
  * Copyright Work Modifications (c) 2019, Steve Macenski
+ * Copyright Work Modifications (c) 2024, Daniel I. Meza
  *
  * THE WORK (AS DEFINED BELOW) IS PROVIDED UNDER THE TERMS OF THIS CREATIVE
  * COMMONS PUBLIC LICENSE ("CCPL" OR "LICENSE"). THE WORK IS PROTECTED BY
@@ -146,23 +147,33 @@ bool LocalizationSlamToolbox::deserializePoseGraphCallback(
 
 /*****************************************************************************/
 void LocalizationSlamToolbox::laserCallback(
-  sensor_msgs::msg::LaserScan::ConstSharedPtr scan)
+  sensor_msgs::msg::LaserScan::ConstSharedPtr scan, const std::string & base_frame_id)
 /*****************************************************************************/
 {
   // store scan header
   scan_header = scan->header;
-  // no odom info
+
+  // no odom info on any pose helper
   Pose2 pose;
-  if (!pose_helper_->getOdomPose(pose, scan->header.stamp)) {
-    RCLCPP_WARN(get_logger(), "Failed to compute odom pose");
+  if (!pose_helpers_[base_frame_id]->getOdomPose(pose, scan->header.stamp, base_frame_id)) {
+    RCLCPP_WARN(get_logger(), "LocalizationSlamToolbox: Failed to compute odom pose for %s", base_frame_id.c_str());
     return;
+  }
+
+  // Add new sensor to laser ID map and create its laser assistant
+  { // ensure mutex is released
+    boost::mutex::scoped_lock l(laser_id_map_mutex_);
+    if (m_laser_id_to_base_id_.find(scan->header.frame_id) == m_laser_id_to_base_id_.end()) {
+      m_laser_id_to_base_id_[scan->header.frame_id] = base_frame_id;
+      laser_assistants_[scan->header.frame_id] = std::make_unique<laser_utils::LaserAssistant>(shared_from_this(), tf_.get(), base_frame_id);
+    }
   }
 
   // ensure the laser can be used
   LaserRangeFinder * laser = getLaser(scan);
 
   if (!laser) {
-    RCLCPP_WARN(get_logger(), "SynchronousSlamToolbox: Failed to create laser"
+    RCLCPP_WARN(get_logger(), "LocalizationSlamToolbox: Failed to create laser"
       " device for %s; discarding scan", scan->header.frame_id.c_str());
     return;
   }
@@ -185,6 +196,7 @@ LocalizedRangeScan * LocalizationSlamToolbox::addScan(
     processor_type_ = PROCESS_NEAR_REGION;
   }
 
+  // get our localized range scan
   LocalizedRangeScan * range_scan = getLocalizedRangeScan(
     laser, scan, odom_pose);
 
@@ -198,7 +210,7 @@ LocalizedRangeScan * LocalizationSlamToolbox::addScan(
   if (processor_type_ == PROCESS_NEAR_REGION) {
     if (!process_near_pose_) {
       RCLCPP_ERROR(get_logger(),
-        "Process near region called without a "
+        "LocalizationSlamToolbox: Process near region called without a "
         "valid region request. Ignoring scan.");
       return nullptr;
     }
@@ -228,7 +240,7 @@ LocalizedRangeScan * LocalizationSlamToolbox::addScan(
   } else {
     // compute our new transform
     setTransformFromPoses(range_scan->GetCorrectedPose(), odom_pose,
-      scan->header.stamp, update_reprocessing_transform);
+      scan->header, update_reprocessing_transform);
 
     publishPose(range_scan->GetCorrectedPose(), covariance, scan->header.stamp);
   }
