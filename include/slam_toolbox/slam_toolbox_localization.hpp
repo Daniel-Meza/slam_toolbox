@@ -1,6 +1,7 @@
 /*
  * slam_toolbox
  * Copyright Work Modifications (c) 2019, Steve Macenski
+ * Copyright Work Modifications (c) 2024, Daniel I. Meza
  *
  * THE WORK (AS DEFINED BELOW) IS PROVIDED UNDER THE TERMS OF THIS CREATIVE
  * COMMONS PUBLIC LICENSE ("CCPL" OR "LICENSE"). THE WORK IS PROTECTED BY
@@ -35,7 +36,7 @@ public:
 
 protected:
   virtual void laserCallback(
-    sensor_msgs::msg::LaserScan::ConstSharedPtr scan) override;
+    sensor_msgs::msg::LaserScan::ConstSharedPtr scan, const std::string & base_frame_id) override;
   void localizePoseCallback(
     const geometry_msgs::msg::PoseWithCovarianceStamped::SharedPtr msg);
   bool clearLocalizationBuffer(
