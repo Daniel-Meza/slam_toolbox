@@ -72,6 +72,7 @@ set(libraries
     sync_slam_toolbox
     sync_slam_toolbox_multirobot
     localization_slam_toolbox
+    localization_slam_toolbox_multirobot
     lifelong_slam_toolbox
     map_and_localization_slam_toolbox
 )
@@ -186,6 +187,11 @@ target_link_libraries(localization_slam_toolbox toolbox_common kartoSlamToolbox 
 add_executable(localization_slam_toolbox_node src/slam_toolbox_localization_node.cpp)
 target_link_libraries(localization_slam_toolbox_node localization_slam_toolbox)
 
+add_library(localization_slam_toolbox_multirobot src/multirobot/slam_toolbox_localization_multirobot.cpp)
+target_link_libraries(localization_slam_toolbox_multirobot toolbox_common_multirobot kartoSlamToolbox ${Boost_LIBRARIES})
+add_executable(localization_slam_toolbox_multirobot_node src/multirobot/slam_toolbox_localization_multirobot_node.cpp)
+target_link_libraries(localization_slam_toolbox_multirobot_node localization_slam_toolbox_multirobot)
+
 add_library(lifelong_slam_toolbox src/experimental/slam_toolbox_lifelong.cpp)
 target_link_libraries(lifelong_slam_toolbox toolbox_common kartoSlamToolbox ${Boost_LIBRARIES})
 add_executable(lifelong_slam_toolbox_node src/experimental/slam_toolbox_lifelong_node.cpp)
@@ -215,6 +221,7 @@ rclcpp_components_register_nodes(async_slam_toolbox_multirobot "slam_toolbox::As
 rclcpp_components_register_nodes(sync_slam_toolbox "slam_toolbox::SynchronousSlamToolbox")
 rclcpp_components_register_nodes(sync_slam_toolbox_multirobot "slam_toolbox::SynchronousSlamToolboxMultirobot")
 rclcpp_components_register_nodes(localization_slam_toolbox "slam_toolbox::LocalizationSlamToolbox")
+rclcpp_components_register_nodes(localization_slam_toolbox_multirobot "slam_toolbox::LocalizationSlamToolboxMultirobot")
 rclcpp_components_register_nodes(lifelong_slam_toolbox "slam_toolbox::LifelongSlamToolbox")
 rclcpp_components_register_nodes(map_and_localization_slam_toolbox "slam_toolbox::MapAndLocalizationSlamToolbox")
 
@@ -224,6 +231,7 @@ install(TARGETS async_slam_toolbox_node
                 sync_slam_toolbox_node
                 sync_slam_toolbox_multirobot_node
                 localization_slam_toolbox_node
+                localization_slam_toolbox_multirobot_node
                 map_and_localization_slam_toolbox_node
                 merge_maps_kinematic
                 ${libraries}
